@@ -17,6 +17,11 @@
 const BACKEND = 'http://127.0.0.1:8765';
 const TOKEN_KEY = 'wm_token';
 
+// Instalador del backend (servicio local). URL estable a la última Release:
+// siempre sirve el último WhisperMeet-Setup.exe publicado por el CI.
+export const BACKEND_DOWNLOAD_URL =
+  'https://github.com/GuillermoPastoriniRivas/tab-recorder/releases/latest/download/WhisperMeet-Setup.exe';
+
 // ── token / pairing ──────────────────────────────────────────────────────
 async function getToken() {
   const { [TOKEN_KEY]: cached } = await chrome.storage.local.get(TOKEN_KEY);

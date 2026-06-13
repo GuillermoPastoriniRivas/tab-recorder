@@ -2,7 +2,7 @@ import { db } from './lib/db.js';
 import { RECORDING_STATUS } from './lib/constants.js';
 import { formatDuration, formatBytes, formatDate, timestampName } from './lib/util.js';
 import { fixWebmDuration } from './lib/webm-duration.js';
-import { transcribeRecording, checkBackend } from './lib/transcriber.js';
+import { transcribeRecording, checkBackend, BACKEND_DOWNLOAD_URL } from './lib/transcriber.js';
 
 // Ensambla el blob final; en WebM inyecta la duración para que sea seekable.
 async function buildBlob(rec) {
@@ -27,6 +27,8 @@ const el = {
   txError: $('txError'), txResult: $('txResult'), txSummary: $('txSummary'),
   txTranscript: $('txTranscript'), txMeta: $('txMeta'),
   txCopy: $('txCopy'), txDownload: $('txDownload'),
+  install: $('install'), installClose: $('installClose'), installDownload: $('installDownload'),
+  installChip: $('installChip'), installChipText: $('installChipText'),
 };
 
 const ICONS = {
@@ -190,20 +192,40 @@ const STAGE_LABEL = {
   summarize: 'Generando el resumen…',
 };
 
-// Estado del servicio local (app de bandeja). Pinta el chip del header.
-async function refreshBackendStatus() {
-  const info = await checkBackend();
-  const chip = el.backendChip;
+// Estado del servicio local (app de bandeja). Pinta el chip del header y, si
+// está abierto, el mini-chip del modal de instalación (auto-cierra al detectar).
+let backendOnline = false;
+function paintChip(chip, textEl, info) {
   chip.classList.remove('checking', 'on', 'off');
   if (info) {
     chip.classList.add('on');
-    el.backendChipText.textContent = info.models_ready ? 'Backend activo' : 'Backend activo · modelos sin descargar';
+    textEl.textContent = info.models_ready ? 'Backend activo' : 'Backend activo · bajando modelos';
   } else {
     chip.classList.add('off');
-    el.backendChipText.textContent = 'Backend apagado';
+    textEl.textContent = 'Backend desactivado';
   }
+}
+async function refreshBackendStatus() {
+  const info = await checkBackend();
+  paintChip(el.backendChip, el.backendChipText, info);
+  if (!el.install.hidden) paintChip(el.installChip, el.installChipText, info);
+
+  // Transición apagado → encendido con el modal de instalación abierto:
+  // lo cerramos y avisamos.
+  if (info && !backendOnline && !el.install.hidden) {
+    closeInstall();
+    toast('Backend detectado ✓');
+  }
+  backendOnline = !!info;
   return info;
 }
+
+// ── onboarding: instalar el backend ─────────────────────────────────────────
+el.installDownload.href = BACKEND_DOWNLOAD_URL;
+function openInstall() { el.install.hidden = false; refreshBackendStatus(); }
+function closeInstall() { el.install.hidden = true; }
+el.installClose.onclick = closeInstall;
+el.install.onclick = (e) => { if (e.target === el.install) closeInstall(); };
 
 // Markdown → HTML mínimo y SEGURO (escapamos antes; sin innerHTML de usuario).
 function escapeHtml(s) {
@@ -299,13 +321,11 @@ el.txClose.onclick = closeTx;
 el.tx.onclick = (e) => { if (e.target === el.tx) closeTx(); };
 
 async function transcribeFlow(rec) {
-  // Chequeo rápido: ¿está el backend?
+  // Chequeo rápido: ¿está el backend? Si no, mostramos el onboarding de
+  // instalación en vez de un error seco.
   const info = await refreshBackendStatus();
+  if (!info) { openInstall(); return; }
   openTx(rec.name);
-  if (!info) {
-    showTxError('El servicio local de transcripción no está corriendo.');
-    return;
-  }
   try {
     const blob = await buildBlob(rec);
     const result = await transcribeRecording(blob, rec.name, updateTxProgress);
@@ -538,8 +558,12 @@ async function render() {
 (async () => {
   await renderFolder();
   await render();
-  refreshBackendStatus();
-  el.backendChip.onclick = () => refreshBackendStatus();
+  await refreshBackendStatus();
+  // Chip: si está activo, re-verifica; si está apagado, abre el onboarding.
+  el.backendChip.onclick = () => { if (backendOnline) refreshBackendStatus(); else openInstall(); };
+  // Sondeo periódico: apenas instalan el backend y arranca, el chip pasa a
+  // verde solo (y se cierra el modal de instalación si estaba abierto).
+  setInterval(() => { if (document.visibilityState === 'visible') refreshBackendStatus(); }, 5000);
 })();
 
-window.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closePlayer(); closeTx(); } });
+window.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closePlayer(); closeTx(); closeInstall(); } });

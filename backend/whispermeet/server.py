@@ -91,12 +91,26 @@ def models_status() -> dict:
     }
 
 
-@app.post("/models/download", dependencies=[Depends(auth_header)])
-def models_download() -> dict:
+def _kick_download() -> None:
+    """Arranca la descarga de modelos en segundo plano si faltan y no está ya
+    corriendo. Idempotente."""
     with _dl_lock:
         if not _dl_state["downloading"] and not models.models_ready():
             _dl_state.update(downloading=True, fraction=0.0, message="Iniciando…", error=None)
             threading.Thread(target=_run_download, daemon=True).start()
+
+
+@app.on_event("startup")
+def _on_startup() -> None:
+    # Al arrancar el servicio (típicamente justo después de instalarlo), si
+    # faltan los modelos los bajamos ya en segundo plano. Así, para cuando el
+    # usuario va a transcribir, la descarga de ~2.3GB suele estar lista.
+    _kick_download()
+
+
+@app.post("/models/download", dependencies=[Depends(auth_header)])
+def models_download() -> dict:
+    _kick_download()
     return {"started": _dl_state["downloading"], "ready": models.models_ready()}
 
 

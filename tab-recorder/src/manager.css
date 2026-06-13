@@ -297,6 +297,22 @@ body {
 .tx-transcript summary:hover { color: var(--txt); }
 .tx-transcript-body { font-size: 12.5px; line-height: 1.6; color: var(--txt-dim); margin-top: 10px; max-height: 34vh; overflow-y: auto; white-space: pre-wrap; }
 
+/* ── Onboarding: instalar el backend ── */
+.install-card { width: min(520px, 100%); }
+.install-intro { font-size: 13.5px; line-height: 1.6; color: var(--txt-dim); margin-bottom: 16px; }
+.install-dl {
+  display: flex; width: 100%; font-size: 14px; padding: 13px 16px;
+  background: linear-gradient(135deg, #2bb6c4, var(--accent)); text-decoration: none;
+}
+.install-dl:hover { filter: brightness(1.08); }
+.install-steps { margin: 18px 0 16px 18px; font-size: 13px; line-height: 1.7; color: var(--txt-dim); }
+.install-steps li { margin: 4px 0; }
+.install-status {
+  display: flex; align-items: center; gap: 10px; padding: 12px 14px;
+  background: rgba(0,0,0,.25); border: 1px solid var(--glass-brd); border-radius: 11px; font-size: 12.5px;
+}
+.install-note { font-size: 11.5px; margin-top: 12px; text-align: center; }
+
 /* ── Toast ── */
 .toast {
   position: fixed; bottom: 26px; left: 50%; transform: translateX(-50%);

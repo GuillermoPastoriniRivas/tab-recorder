@@ -17,7 +17,10 @@ DefaultDirName={autopf}\{#AppName}
 DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
 OutputDir=Output
-OutputBaseFilename={#AppName}-Setup-{#AppVersion}
+; Nombre FIJO (sin versión) para que la URL .../releases/latest/download/
+; WhisperMeet-Setup.exe siempre apunte al último instalador. La versión queda
+; en los metadatos del instalador (AppVersion).
+OutputBaseFilename={#AppName}-Setup
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern

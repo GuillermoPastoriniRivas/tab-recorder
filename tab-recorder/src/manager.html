@@ -137,6 +137,35 @@
     </div>
   </div>
 
+  <!-- Onboarding: instalar el backend -->
+  <div id="install" class="modal" hidden>
+    <div class="modal-card install-card">
+      <div class="modal-head">
+        <strong>Activá la transcripción</strong>
+        <button id="installClose" class="icon-btn">✕</button>
+      </div>
+      <div class="modal-body">
+        <p class="install-intro">
+          La <b>transcripción y el resumen</b> corren en un pequeño servicio local
+          (<b>WhisperMeet</b>) que se ejecuta en tu propia PC — 100% local, sin nube.
+          Se instala una sola vez.
+        </p>
+        <a id="installDownload" class="btn primary install-dl" href="#" target="_blank" rel="noopener">⬇ Descargar backend (.exe)</a>
+        <ol class="install-steps">
+          <li>Descargá y ejecutá el instalador.</li>
+          <li>Se abre solo (vas a ver un ícono en la bandeja del sistema).</li>
+          <li>La <b>primera vez</b> baja los modelos de IA (~2.3&nbsp;GB). Puede tardar.</li>
+          <li>Este indicador se pone <b>verde</b> automáticamente. ¡Listo!</li>
+        </ol>
+        <div class="install-status">
+          <span id="installChip" class="backend-chip checking"><span class="dot"></span><span id="installChipText">Verificando…</span></span>
+          <span class="muted">Esperando a que el servicio arranque…</span>
+        </div>
+        <p class="install-note muted">Solo Windows por ahora · descarga directa, sin cuenta.<br>Si Windows muestra un aviso de seguridad: <b>Más información → Ejecutar de todas formas</b> (el instalador no está firmado todavía).</p>
+      </div>
+    </div>
+  </div>
+
   <div id="toast" class="toast" hidden></div>
 
   <template id="rowTpl">
