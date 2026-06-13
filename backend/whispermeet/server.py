@@ -18,7 +18,7 @@ from fastapi.responses import StreamingResponse
 
 from . import config, jobs, models
 
-app = FastAPI(title="WhisperMeet backend", version="0.1.1")
+app = FastAPI(title="WhisperMeet backend", version="0.1.2")
 
 app.add_middleware(
     CORSMiddleware,

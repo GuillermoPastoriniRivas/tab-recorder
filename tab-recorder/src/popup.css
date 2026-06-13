@@ -64,10 +64,11 @@ body > *:not(.aurora) { position: relative; z-index: 1; }
   display: grid; place-items: center;
   box-shadow: 0 6px 18px rgba(109,107,255,.4);
 }
-/* Punto del logo: oculto en reposo; aparece rojo y pulsante SOLO al grabar. */
-.logo-dot { width: 11px; height: 11px; border-radius: 50%; background: #ff4d57; display: none; }
-.logo.recording .logo-dot { display: block; box-shadow: 0 0 0 4px rgba(255,77,87,.3); animation: recPulse 1.2s ease-in-out infinite; }
-@keyframes recPulse { 50% { opacity: .35; transform: scale(.88); } }
+/* Punto del logo: blanco en reposo (el diseño de siempre); rojo y pulsante
+   SOLO mientras se graba. */
+.logo-dot { width: 11px; height: 11px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 4px rgba(255,255,255,.25); transition: background .2s, box-shadow .2s; }
+.logo.recording .logo-dot { background: #ff4d57; box-shadow: 0 0 0 4px rgba(255,77,87,.35); animation: recPulse 1.2s ease-in-out infinite; }
+@keyframes recPulse { 50% { opacity: .4; transform: scale(.85); } }
 .brand-text { display: flex; flex-direction: column; line-height: 1.15; }
 .brand-text strong { font-size: 14px; letter-spacing: .2px; }
 .brand-text small { font-size: 10.5px; color: var(--txt-mute); }

@@ -52,10 +52,11 @@ body {
   width: 46px; height: 46px; border-radius: 14px; background: var(--grad);
   display: grid; place-items: center; box-shadow: 0 8px 24px rgba(109,107,255,.45);
 }
-/* Punto del logo: oculto en reposo; rojo y pulsante SOLO mientras se graba. */
-.logo-dot { width: 14px; height: 14px; border-radius: 50%; background: #ff4d57; display: none; }
-.logo.recording .logo-dot { display: block; box-shadow: 0 0 0 5px rgba(255,77,87,.28); animation: recPulse 1.2s ease-in-out infinite; }
-@keyframes recPulse { 50% { opacity: .35; transform: scale(.85); } }
+/* Punto del logo: blanco en reposo (el diseño de siempre); rojo y pulsante
+   SOLO mientras se graba. */
+.logo-dot { width: 14px; height: 14px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 5px rgba(255,255,255,.22); transition: background .2s, box-shadow .2s; }
+.logo.recording .logo-dot { background: #ff4d57; box-shadow: 0 0 0 5px rgba(255,77,87,.3); animation: recPulse 1.2s ease-in-out infinite; }
+@keyframes recPulse { 50% { opacity: .4; transform: scale(.85); } }
 .head h1 { font-size: 22px; letter-spacing: .2px; }
 .head p { font-size: 13px; color: var(--txt-mute); margin-top: 2px; }
 

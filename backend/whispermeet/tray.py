@@ -19,12 +19,36 @@ _RUN_NAME = config.APP_NAME
 # ---------------------------------------------------------------------------
 # Servidor en un hilo
 # ---------------------------------------------------------------------------
+def _log_error(label: str, exc_text: str) -> None:
+    """Registra errores en %LOCALAPPDATA%\\WhisperMeet\\backend.log para que el
+    backend headless no falle nunca en silencio."""
+    try:
+        with open(config.DATA_DIR / "backend.log", "a", encoding="utf-8") as f:
+            f.write(f"=== {label} ===\n{exc_text}\n")
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def _serve() -> None:
-    import uvicorn
+    import traceback
 
-    from .server import app
+    try:
+        import uvicorn
 
-    uvicorn.run(app, host=config.HOST, port=config.PORT, log_level="warning")
+        from .server import app
+
+        # loop/http explícitos: en el exe empaquetado, la autodetección de
+        # uvicorn puede no encontrar las implementaciones e impedir el arranque.
+        uvicorn.run(
+            app,
+            host=config.HOST,
+            port=config.PORT,
+            log_level="warning",
+            loop="asyncio",
+            http="h11",
+        )
+    except Exception:  # noqa: BLE001
+        _log_error("Error al iniciar el servidor", traceback.format_exc())
 
 
 # ---------------------------------------------------------------------------
@@ -112,9 +136,31 @@ def _monitor(icon) -> None:
         time.sleep(2)
 
 
+def _ensure_std_streams() -> None:
+    """En el exe empaquetado con --windowed, sys.stdout/stderr son None. Varias
+    libs (uvicorn al loguear) crashean al escribir ahí. Los redirigimos al log
+    para que el servidor arranque igual y quede registro."""
+    if sys.stdout is not None and sys.stderr is not None:
+        return
+    try:
+        log = open(config.DATA_DIR / "backend.log", "a", encoding="utf-8", buffering=1)
+        if sys.stdout is None:
+            sys.stdout = log
+        if sys.stderr is None:
+            sys.stderr = log
+    except Exception:  # noqa: BLE001
+        import io
+
+        if sys.stdout is None:
+            sys.stdout = io.StringIO()
+        if sys.stderr is None:
+            sys.stderr = io.StringIO()
+
+
 def run() -> None:
     import pystray
 
+    _ensure_std_streams()
     threading.Thread(target=_serve, daemon=True).start()
 
     def on_open_outputs(icon, item):
