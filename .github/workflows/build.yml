@@ -12,6 +12,10 @@ on:
 permissions:
   contents: write   # necesario para crear/editar Releases
 
+defaults:
+  run:
+    working-directory: backend
+
 jobs:
   build:
     runs-on: windows-latest
@@ -39,7 +43,7 @@ jobs:
             --collect-all onnxruntime `
             --collect-submodules uvicorn `
             --hidden-import pystray._win32 `
-            whispermeet.py
+            run.py
 
       - name: Empaquetar ZIP
         run: Compress-Archive -Path dist/WhisperMeet/* -DestinationPath dist/WhisperMeet-windows.zip
@@ -54,14 +58,14 @@ jobs:
         with:
           name: WhisperMeet-windows
           path: |
-            dist/WhisperMeet-windows.zip
-            installer/Output/*.exe
+            backend/dist/WhisperMeet-windows.zip
+            backend/installer/Output/*.exe
 
       - name: Publicar en la Release (solo en tags)
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            dist/WhisperMeet-windows.zip
-            installer/Output/*.exe
+            backend/dist/WhisperMeet-windows.zip
+            backend/installer/Output/*.exe
           generate_release_notes: true

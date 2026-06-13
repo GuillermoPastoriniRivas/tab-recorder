@@ -1,16 +1,20 @@
 # Build del ejecutable con PyInstaller (modo onedir).
-# Uso:  .\build.ps1
+# Uso (desde la carpeta backend/, con tu entorno Python activado):
+#   .\build.ps1
 # Después compilar el instalador con:  ISCC.exe installer\setup.iss
 #
 # Los modelos NO se empaquetan: se descargan en el primer arranque.
 
 $ErrorActionPreference = "Stop"
-$py = ".\.venv\Scripts\python.exe"
 
-& $py -m pip install pyinstaller
+# Usa el python del PATH (activá tu venv antes). Para crear uno:
+#   py -3.11 -m venv .venv ; .\.venv\Scripts\Activate.ps1
+#   pip install -r requirements.txt
+#   pip install llama-cpp-python --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
+python -m pip install pyinstaller
 
 # --collect-all arrastra DLLs nativas y data de cada paquete pesado.
-& $py -m PyInstaller `
+python -m PyInstaller `
     --noconfirm `
     --clean `
     --name WhisperMeet `
@@ -22,7 +26,7 @@ $py = ".\.venv\Scripts\python.exe"
     --collect-all onnxruntime `
     --collect-submodules uvicorn `
     --hidden-import pystray._win32 `
-    whispermeet.py
+    run.py
 
 Write-Host ""
 Write-Host "Build listo en dist\WhisperMeet\WhisperMeet.exe"

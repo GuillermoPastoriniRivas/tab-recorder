@@ -11,7 +11,7 @@ import argparse
 import sys
 import time
 
-from backend import jobs, models, summarize, transcribe
+from whispermeet import jobs, models, summarize, transcribe
 
 
 def _bar(fraction: float, width: int = 30) -> str:

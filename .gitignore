@@ -7,5 +7,5 @@ dist/
 install_*.log
 build.log
 test_run*.log
-installer/Output/
+backend/installer/Output/
 *.mp4

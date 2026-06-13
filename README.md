@@ -1,107 +1,66 @@
-# WhisperMeet — backend local
+# Local Whisper — graba, transcribe y resume tus reuniones, 100% local
 
-Transcribe y resume grabaciones de reuniones **100% local** en Windows (CPU).
-Pensado para que una extensión de Chrome lo maneje: la extensión graba el
-tab, manda el video al backend por HTTP en `localhost`, y recibe la
-transcripción + resumen.
+Dos piezas que trabajan juntas para grabar reuniones (Meet, etc.) y obtener
+**transcripción + resumen** sin que nada salga de tu equipo:
 
 ```
-Extensión Chrome ──HTTP──> Backend local (tray, headless)
-  graba el Blob            faster-whisper (small) → Qwen2.5 3B (llama.cpp)
+┌──────────── Extensión de Chrome ────────────┐      ┌──────── Backend local ────────┐
+│  graba el tab (audio+video) → MP4/WebM       │ HTTP │  faster-whisper  → transcripción │
+│  biblioteca de grabaciones                   │ ───▶ │  Qwen2.5 3B (llama.cpp) → resumen │
+│  botón "Transcribir + Resumir"               │ ◀─── │  servicio headless en la bandeja  │
+└──────────────────────────────────────────────┘ SSE  └───────────────────────────────────┘
+                                              127.0.0.1
 ```
 
-- **Transcripción:** faster-whisper `small` int8 (autodetecta ES/EN).
-- **Resumen:** Qwen2.5 3B GGUF vía `llama-cpp-python`, con map-reduce para
-  reuniones largas. Sin Ollama: el LLM corre embebido.
+Sin nube, sin cuentas, sin Ollama. La IA corre embebida en tu CPU.
 
-## Dos componentes independientes
+## Componentes
 
-1. **Extensión de Chrome** (`tab-recorder/`) — graba el tab a MP4/WebM, 100%
-   local. **Funciona sola, sin el backend.** La transcripción es un add-on
-   opcional: si el backend no está corriendo, el botón "Transcribir + Resumir"
-   avisa amablemente y el resto de la extensión sigue funcionando igual.
-2. **Backend WhisperMeet** (este repo) — servicio local headless que hace la
-   IA. Se instala aparte (exe) solo si querés la transcripción/resumen.
+| Carpeta | Qué es | ¿Necesita el otro? |
+|---|---|---|
+| [`tab-recorder/`](tab-recorder/) | Extensión de Chrome (MV3) que graba el tab y guarda local | **No** — funciona sola como grabador |
+| [`backend/`](backend/) | Servicio local (WhisperMeet) que transcribe y resume | Opcional — solo para la transcripción |
+
+La transcripción es un **add-on opt-in**: si el backend no está corriendo, la
+extensión sigue grabando y gestionando archivos igual; el botón de transcribir
+simplemente avisa que el servicio no está disponible.
+
+## Estructura del repo
+
+```
+local-whisper/
+├── README.md            (este archivo)
+├── LICENSE              (MIT)
+├── .github/workflows/   (CI: compila el backend y publica en Releases)
+├── tab-recorder/        extensión de Chrome (su propio README)
+└── backend/             servicio WhisperMeet (su propio README)
+    ├── run.py · cli.py · build.ps1 · requirements.txt
+    ├── installer/setup.iss
+    └── whispermeet/     (paquete Python)
+```
+
+## Cómo usarlo
+
+**1. Extensión (grabar):**
+`chrome://extensions` → modo desarrollador → "Cargar descomprimida" → carpeta
+`tab-recorder/`. Ver [tab-recorder/README.md](tab-recorder/README.md).
+
+**2. Backend (transcribir/resumir, opcional):**
+Descargá el instalador desde **[Releases](../../releases)** y ejecutalo, o
+corré desde la fuente (ver [backend/README.md](backend/README.md)). Una vez
+prendido (icono en la bandeja), la extensión lo detecta solo.
+
+> Primer arranque del backend: descarga los modelos (~2.3 GB) desde
+> HuggingFace. Después funciona 100% offline.
+
+## Distribución
+
+El **código** vive en git; los **binarios** (instalador/zip, cientos de MB) se
+publican en **GitHub Releases**. El workflow `.github/workflows/build.yml`
+compila el backend en Windows y adjunta los artefactos en cada tag `vX.Y.Z`
+(o a mano desde la pestaña *Actions*).
 
 ## Licencias
 
-Proyecto bajo **MIT** (ver `LICENSE`). Los modelos NO se redistribuyen: se
-descargan en runtime desde HuggingFace — Whisper (MIT) y Qwen2.5-3B
-(Apache-2.0).
-- **Audio:** se decodifica directo del MP4 con PyAV (sin ffmpeg externo).
-- **Modelos:** se descargan en el primer arranque a `%LOCALAPPDATA%\WhisperMeet`.
-
-## Estructura
-
-```
-backend/
-  config.py       rutas, puerto, token, ids de modelos
-  transcribe.py   faster-whisper (lee el MP4 directo)
-  summarize.py    llama.cpp + map-reduce
-  models.py       descarga de modelos (1er arranque)
-  jobs.py         cola de jobs + orquestación del pipeline
-  server.py       FastAPI: endpoints + SSE
-  tray.py         icono de bandeja + autostart Windows
-cli.py            runner de prueba por línea de comandos
-build.ps1         empaqueta con PyInstaller
-installer/setup.iss   instalador (Inno Setup)
-```
-
-## Desarrollo
-
-```powershell
-py -3.11 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
-# (llama-cpp-python desde wheels precompilados CPU)
-.\.venv\Scripts\python.exe -m pip install llama-cpp-python `
-    --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
-
-# Probar el pipeline con un video:
-.\.venv\Scripts\python.exe cli.py "ruta\al\video.mp4"
-
-# Levantar el backend + tray:
-.\.venv\Scripts\python.exe -m backend
-```
-
-## API HTTP (para la extensión)
-
-Base: `http://127.0.0.1:8765`. Todas las rutas (salvo `/health`) requieren el
-header `X-WhisperMeet-Token: <token>`. El token está en
-`%LOCALAPPDATA%\WhisperMeet\token.txt` (la extensión lo lee una vez).
-
-| Método | Ruta | Descripción |
-|---|---|---|
-| GET | `/health` | Estado y si los modelos están listos |
-| GET | `/models/status` | Readiness + progreso de descarga |
-| POST | `/models/download` | Pre-descarga los modelos |
-| POST | `/process` | Sube el video (multipart `file`) → `{job_id}` |
-| GET | `/jobs/{id}/stream?token=…` | SSE con progreso en vivo |
-| GET | `/jobs/{id}/result` | Resultado final (transcript + summary + ruta .md) |
-
-Eventos SSE (`data: {json}`):
-- `{"type":"progress","stage":"download|transcribe|summarize","fraction":0..1,"message":"…"}`
-- `{"type":"done","result":{…}}`
-- `{"type":"error","message":"…"}`
-
-## Empaquetado
-
-```powershell
-.\build.ps1                 # PyInstaller → dist\WhisperMeet\
-ISCC.exe installer\setup.iss   # Inno Setup → instalador final
-```
-
-El instalador es liviano (~100-200MB); los modelos (~2.3GB) se bajan en el
-primer arranque.
-
-## Distribución (open source)
-
-El código fuente vive en git; los **binarios NO se commitean** (pesan cientos
-de MB e inflan el historial). Se distribuyen por **GitHub Releases**:
-
-- Hacé `git tag v0.1.0 && git push --tags`.
-- El workflow `.github/workflows/build.yml` compila en Windows y adjunta a la
-  Release el `WhisperMeet-windows.zip` y el instalador `.exe`.
-- También se puede disparar a mano desde la pestaña **Actions**
-  (workflow_dispatch) para bajar los artefactos sin crear una Release.
-
-Para compilar localmente: `.\build.ps1` (deja `dist\WhisperMeet\`).
+Proyecto bajo **MIT** (ver [LICENSE](LICENSE)). Los modelos no se redistribuyen:
+se descargan en runtime — Whisper (MIT) y Qwen2.5-3B (Apache-2.0).

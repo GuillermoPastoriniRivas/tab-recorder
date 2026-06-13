@@ -33,7 +33,7 @@ def _serve() -> None:
 def _autostart_command() -> str:
     if getattr(sys, "frozen", False):  # empaquetado con PyInstaller
         return f'"{sys.executable}"'
-    return f'"{sys.executable}" -m backend'
+    return f'"{sys.executable}" -m whispermeet'
 
 
 def is_autostart_enabled() -> bool:
