@@ -1,0 +1,67 @@
+name: build-release
+
+# Compila el backend WhisperMeet en Windows y, cuando el push es un tag vX.Y.Z,
+# adjunta el .zip y el instalador a la Release de GitHub.
+# También se puede disparar a mano desde la pestaña Actions (workflow_dispatch).
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write   # necesario para crear/editar Releases
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Instalar dependencias
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install llama-cpp-python --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
+          pip install pyinstaller
+
+      - name: Compilar con PyInstaller
+        run: |
+          pyinstaller --noconfirm --clean --name WhisperMeet --windowed `
+            --collect-all llama_cpp `
+            --collect-all ctranslate2 `
+            --collect-all av `
+            --collect-all faster_whisper `
+            --collect-all onnxruntime `
+            --collect-submodules uvicorn `
+            --hidden-import pystray._win32 `
+            whispermeet.py
+
+      - name: Empaquetar ZIP
+        run: Compress-Archive -Path dist/WhisperMeet/* -DestinationPath dist/WhisperMeet-windows.zip
+
+      - name: Compilar instalador (Inno Setup)
+        run: |
+          choco install innosetup -y --no-progress
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\setup.iss
+
+      - name: Subir artefactos al run (siempre)
+        uses: actions/upload-artifact@v4
+        with:
+          name: WhisperMeet-windows
+          path: |
+            dist/WhisperMeet-windows.zip
+            installer/Output/*.exe
+
+      - name: Publicar en la Release (solo en tags)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/WhisperMeet-windows.zip
+            installer/Output/*.exe
+          generate_release_notes: true

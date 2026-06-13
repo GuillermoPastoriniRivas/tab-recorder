@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="manager.css">
+  <title>Tab Recorder — Grabaciones</title>
+</head>
+<body>
+  <div class="aurora"></div>
+
+  <div class="wrap">
+    <header class="head">
+      <div class="brand">
+        <span class="logo"><span class="logo-dot"></span></span>
+        <div>
+          <h1>Tab Recorder</h1>
+          <p>Tus grabaciones se guardan localmente. Nada sale de tu equipo.</p>
+        </div>
+      </div>
+      <div id="backendChip" class="backend-chip checking" title="Estado del servicio de transcripción local">
+        <span class="dot"></span><span id="backendChipText">Verificando backend…</span>
+      </div>
+    </header>
+
+    <!-- Carpeta -->
+    <section class="panel folder-panel">
+      <div class="folder-info">
+        <svg viewBox="0 0 24 24" width="22" height="22"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+        <div>
+          <strong>Carpeta de guardado</strong>
+          <span id="folderName" class="muted">Ninguna · se te pedirá al guardar</span>
+        </div>
+      </div>
+      <div class="folder-actions">
+        <button id="regrant" class="btn primary" hidden>Reactivar permiso</button>
+        <button id="pickFolder" class="btn primary">Elegir carpeta…</button>
+        <button id="clearFolder" class="btn ghost" hidden>Quitar</button>
+      </div>
+    </section>
+    <p class="folder-note">
+      Si elegís una carpeta, las próximas grabaciones se escriben <b>en vivo</b> a disco mientras grabás
+      (sin llenar la memoria). Si no, podés guardarlas desde acá al terminar.
+    </p>
+
+    <!-- Recuperación -->
+    <section id="recoveryBanner" class="banner" hidden>
+      <svg viewBox="0 0 24 24" width="20" height="20"><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span id="recoveryText">Hay grabaciones que quedaron incompletas (probablemente por un cierre inesperado). Podés recuperarlas igual.</span>
+    </section>
+
+    <!-- Biblioteca -->
+    <section class="library">
+      <div class="library-head">
+        <h2>Grabaciones</h2>
+        <span id="count" class="count">0</span>
+        <button id="selectMode" class="btn tiny ghost push">Seleccionar</button>
+      </div>
+
+      <div class="toolbar">
+        <div class="seg-filter" id="typeFilter">
+          <button class="seg active" data-type="all">Todas <b id="cAll">0</b></button>
+          <button class="seg" data-type="video">🎥 Video <b id="cVideo">0</b></button>
+          <button class="seg" data-type="audio">🎙️ Audio <b id="cAudio">0</b></button>
+        </div>
+        <button id="favFilter" class="chip-toggle" type="button">★ Favoritas <b id="cFav">0</b></button>
+        <span class="spacer"></span>
+        <input id="search" class="search" type="search" placeholder="Buscar por nombre…">
+        <select id="sortBy" class="sort" title="Ordenar">
+          <option value="date">Recientes</option>
+          <option value="size">Tamaño</option>
+          <option value="duration">Duración</option>
+          <option value="name">Nombre</option>
+        </select>
+      </div>
+
+      <div id="bulkBar" class="bulk-bar" hidden>
+        <span id="bulkCount">0 seleccionadas</span>
+        <span class="spacer"></span>
+        <button id="bulkDelete" class="btn tiny danger-ghost" disabled>Eliminar seleccionadas</button>
+        <button id="bulkCancel" class="btn tiny ghost">Cancelar</button>
+      </div>
+
+      <div id="list" class="list"></div>
+      <div id="empty" class="empty" hidden>
+        <svg viewBox="0 0 24 24" width="40" height="40"><path d="M5 4h9l5 5v11a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1zm9 0v5h5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+        <p id="emptyText">Todavía no hay grabaciones.<br>Abrí el popup de la extensión y tocá <b>Grabar</b>.</p>
+      </div>
+    </section>
+  </div>
+
+  <!-- Reproductor -->
+  <div id="player" class="modal" hidden>
+    <div class="modal-card">
+      <div class="modal-head">
+        <strong id="playerTitle">Reproducción</strong>
+        <button id="playerClose" class="icon-btn">✕</button>
+      </div>
+      <div id="playerBody" class="modal-body"></div>
+    </div>
+  </div>
+
+  <!-- Transcripción + Resumen -->
+  <div id="tx" class="modal" hidden>
+    <div class="modal-card tx-card">
+      <div class="modal-head">
+        <strong id="txTitle">Transcribir + Resumir</strong>
+        <button id="txClose" class="icon-btn">✕</button>
+      </div>
+      <div class="modal-body">
+        <!-- progreso -->
+        <div id="txProgress" class="tx-progress">
+          <div class="tx-stage" id="txStage">Conectando con el backend…</div>
+          <div class="tx-bar"><div id="txBarFill" class="tx-bar-fill"></div></div>
+          <div class="tx-msg muted" id="txMsg"></div>
+          <p class="tx-hint muted">En CPU esto puede tardar varios minutos según la duración del video. Podés cerrar esta ventana y volver: el resultado también se guarda como <code>.md</code> en la carpeta de WhisperMeet.</p>
+        </div>
+
+        <!-- error -->
+        <div id="txError" class="tx-error" hidden></div>
+
+        <!-- resultado -->
+        <div id="txResult" class="tx-result" hidden>
+          <div class="tx-result-actions">
+            <button id="txCopy" class="btn tiny primary">Copiar resumen</button>
+            <button id="txDownload" class="btn tiny ghost">Descargar .md</button>
+            <span class="spacer"></span>
+            <span id="txMeta" class="muted"></span>
+          </div>
+          <div id="txSummary" class="md"></div>
+          <details class="tx-transcript">
+            <summary>Ver transcripción completa</summary>
+            <div id="txTranscript" class="tx-transcript-body"></div>
+          </details>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <template id="rowTpl">
+    <article class="row">
+      <input type="checkbox" class="act-check row-check" title="Seleccionar">
+      <button class="fav-btn act-fav" type="button">
+        <svg class="star-off" viewBox="0 0 24 24" width="19" height="19"><path d="m12 3.6 2.6 5.3 5.8.8-4.2 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+        <svg class="star-on" viewBox="0 0 24 24" width="19" height="19"><path d="m12 3.6 2.6 5.3 5.8.8-4.2 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z" fill="currentColor" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+      </button>
+      <div class="thumb"><svg class="thumb-ico" viewBox="0 0 24 24" width="22" height="22"></svg></div>
+      <div class="meta">
+        <div class="row-top">
+          <strong class="name"></strong>
+          <button class="rename-btn act-rename" type="button" title="Renombrar">
+            <svg viewBox="0 0 24 24" width="14" height="14"><path d="M4 20h4l10-10-4-4L4 16v4zM14 6l4 4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <span class="badges"></span>
+        </div>
+        <div class="sub"></div>
+      </div>
+      <div class="row-actions">
+        <button class="btn tiny ai act-transcribe">📝 Transcribir + Resumir</button>
+        <button class="btn tiny ghost act-play">▶ Reproducir</button>
+        <button class="btn tiny primary act-save">Guardar</button>
+        <button class="btn tiny ghost act-dl">Descargar</button>
+        <button class="btn tiny danger-ghost act-del">Eliminar</button>
+      </div>
+    </article>
+  </template>
+
+  <script type="module" src="manager.js"></script>
+</body>
+</html>

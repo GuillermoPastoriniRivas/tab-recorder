@@ -1,0 +1,141 @@
+"""Servidor local headless (FastAPI).
+
+Escucha solo en 127.0.0.1. La extensión de Chrome le pega por HTTP:
+sube el Blob del video, sigue el progreso por SSE y recupera el resultado.
+
+Seguridad: CORS restringido a orígenes chrome-extension:// + un token por
+instalación que la extensión debe mandar en cada request.
+"""
+from __future__ import annotations
+
+import json
+import threading
+from pathlib import Path
+
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
+
+from . import config, jobs, models
+
+app = FastAPI(title="WhisperMeet backend", version="0.1.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origin_regex=config.ALLOW_ORIGIN_REGEX,
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+_TOKEN = config.get_or_create_token()
+
+
+def _check(token: str | None) -> None:
+    if not token or token != _TOKEN:
+        raise HTTPException(status_code=401, detail="Token inválido o ausente")
+
+
+async def auth_header(x_whispermeet_token: str | None = Header(default=None)) -> None:
+    _check(x_whispermeet_token)
+
+
+# ---------------------------------------------------------------------------
+# Estado de descarga de modelos (para poder pre-descargar desde la UI)
+# ---------------------------------------------------------------------------
+_dl_state = {"downloading": False, "fraction": 0.0, "message": "", "error": None}
+_dl_lock = threading.Lock()
+
+
+def _run_download() -> None:
+    def cb(fraction: float, message: str) -> None:
+        _dl_state["fraction"] = round(fraction, 3)
+        _dl_state["message"] = message
+
+    try:
+        models.ensure_models(cb)
+    except Exception as exc:  # noqa: BLE001
+        _dl_state["error"] = str(exc)
+    finally:
+        _dl_state["downloading"] = False
+
+
+# ---------------------------------------------------------------------------
+# Endpoints
+# ---------------------------------------------------------------------------
+@app.get("/health")
+def health() -> dict:
+    return {
+        "status": "ok",
+        "version": app.version,
+        "models_ready": models.models_ready(),
+    }
+
+
+@app.get("/pair")
+def pair() -> dict:
+    """Entrega el token a la extensión en el primer uso. CORS ya restringe la
+    LECTURA de la respuesta a orígenes chrome-extension://, así que una web
+    cualquiera no puede leer el token aunque dispare el request. La extensión
+    lo guarda y lo manda en `X-WhisperMeet-Token` en cada llamada posterior."""
+    return {"token": _TOKEN, "port": config.PORT, "version": app.version}
+
+
+@app.get("/models/status", dependencies=[Depends(auth_header)])
+def models_status() -> dict:
+    return {
+        "whisper_ready": models.whisper_ready(),
+        "llm_ready": models.llm_ready(),
+        "ready": models.models_ready(),
+        **_dl_state,
+    }
+
+
+@app.post("/models/download", dependencies=[Depends(auth_header)])
+def models_download() -> dict:
+    with _dl_lock:
+        if not _dl_state["downloading"] and not models.models_ready():
+            _dl_state.update(downloading=True, fraction=0.0, message="Iniciando…", error=None)
+            threading.Thread(target=_run_download, daemon=True).start()
+    return {"started": _dl_state["downloading"], "ready": models.models_ready()}
+
+
+@app.post("/process", dependencies=[Depends(auth_header)])
+async def process(file: UploadFile) -> dict:
+    # Guardamos el upload en disco para que faster-whisper/PyAV lo lean.
+    safe_name = Path(file.filename or "grabacion.mp4").name
+    dest = config.TMP_DIR / f"{safe_name}"
+    with open(dest, "wb") as f:
+        while chunk := await file.read(1024 * 1024):
+            f.write(chunk)
+
+    job = jobs.create(source_name=safe_name, media_path=str(dest))
+    return {"job_id": job.id}
+
+
+@app.get("/jobs/{job_id}/stream")
+def job_stream(job_id: str, token: str | None = Query(default=None)):
+    # EventSource no permite headers custom → aceptamos el token por query.
+    _check(token)
+    job = jobs.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job no encontrado")
+
+    def gen():
+        for event in jobs.stream(job):
+            yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(gen(), media_type="text/event-stream")
+
+
+@app.get("/jobs/{job_id}/result", dependencies=[Depends(auth_header)])
+def job_result(job_id: str) -> dict:
+    job = jobs.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job no encontrado")
+    return {
+        "status": job.status,
+        "stage": job.stage,
+        "error": job.error,
+        "result": job.result,
+    }

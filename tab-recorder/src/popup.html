@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="popup.css">
+  <title>Tab Recorder</title>
+</head>
+<body>
+  <div class="aurora"></div>
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo"><span class="logo-dot"></span></span>
+      <div class="brand-text">
+        <strong>Tab Recorder</strong>
+        <small>captura local · 100% privada</small>
+      </div>
+    </div>
+    <button id="openManager" class="icon-btn" title="Grabaciones y carpeta">
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+        <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"
+              fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+      </svg>
+    </button>
+  </header>
+
+  <!-- ░░ ESTADO: GRABANDO ░░ -->
+  <section id="liveCard" class="card live" hidden>
+    <div class="live-head">
+      <span class="rec-pill"><span class="rec-dot"></span><span id="liveLabel">GRABANDO</span></span>
+      <span id="liveSize" class="chip">0 B</span>
+    </div>
+    <div id="liveTimer" class="timer">00:00</div>
+    <div class="equalizer" id="equalizer" aria-hidden="true">
+      <span></span><span></span><span></span><span></span><span></span>
+      <span></span><span></span><span></span><span></span><span></span>
+      <span></span><span></span><span></span><span></span><span></span>
+    </div>
+    <button id="muteMic" class="mic-toggle" hidden>
+      <svg class="ico-on" viewBox="0 0 24 24" width="16" height="16"><path d="M12 3a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3zM5 11a7 7 0 0 0 14 0M12 18v3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      <svg class="ico-off" viewBox="0 0 24 24" width="16" height="16"><path d="M9 9v3a3 3 0 0 0 5.1 2.1M15 11V6a3 3 0 0 0-5.9-.8M5 11a7 7 0 0 0 10.3 6.2M12 18v3M3 3l18 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      <span id="muteLabel">Silenciar mi micrófono</span>
+    </button>
+    <div class="live-actions">
+      <button id="pause" class="btn ghost">
+        <svg viewBox="0 0 24 24" width="16" height="16"><path d="M7 5h3v14H7zM14 5h3v14h-3z" fill="currentColor"/></svg>
+        Pausar
+      </button>
+      <button id="resume" class="btn ghost" hidden>
+        <svg viewBox="0 0 24 24" width="16" height="16"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>
+        Reanudar
+      </button>
+      <button id="stop" class="btn danger">
+        <svg viewBox="0 0 24 24" width="16" height="16"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg>
+        Detener
+      </button>
+    </div>
+  </section>
+
+  <!-- ░░ ESTADO: CONFIGURACIÓN ░░ -->
+  <section id="setupCard" class="card">
+    <div class="field">
+      <span class="label">¿Qué querés grabar?</span>
+      <div class="segmented" id="modeSeg">
+        <button class="seg active" data-mode="video">
+          <svg viewBox="0 0 24 24" width="16" height="16"><path d="M4 6h11a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2zm13 4 5-3v10l-5-3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+          Audio + Video
+        </button>
+        <button class="seg" data-mode="audio">
+          <svg viewBox="0 0 24 24" width="16" height="16"><path d="M12 3a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3zM5 11a7 7 0 0 0 14 0M12 18v3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+          Solo audio
+        </button>
+      </div>
+    </div>
+
+    <div class="field">
+      <span class="label">Micrófono</span>
+      <div class="select-wrap">
+        <select id="mic"></select>
+        <svg class="caret" viewBox="0 0 24 24" width="16" height="16"><path d="m6 9 6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </div>
+      <div class="meter">
+        <canvas id="meterCanvas" width="320" height="34"></canvas>
+        <button id="enableMic" class="link" hidden>Permitir micrófono</button>
+      </div>
+    </div>
+
+    <label class="field row toggle-row">
+      <span>
+        <span class="label">Cancelación de eco</span>
+        <small class="hint">Recomendado si usás parlantes</small>
+      </span>
+      <span class="switch">
+        <input type="checkbox" id="echo" checked>
+        <span class="track"><span class="thumb"></span></span>
+      </span>
+    </label>
+
+    <div class="field row folder-row">
+      <span>
+        <span class="label">Carpeta de guardado</span>
+        <small id="folderName" class="hint muted">Se pedirá al guardar</small>
+      </span>
+      <button id="configFolder" class="btn tiny ghost">Configurar</button>
+    </div>
+
+    <button id="advToggle" class="adv-toggle" type="button">
+      <svg viewBox="0 0 24 24" width="15" height="15"><path d="M10.3 4.3a1 1 0 0 1 .95-.7h1.5a1 1 0 0 1 .95.7l.3 1.2a6.8 6.8 0 0 1 1.6.9l1.2-.4a1 1 0 0 1 1.2.45l.75 1.3a1 1 0 0 1-.24 1.27l-.95.8c.06.55.06 1.1 0 1.65l.95.8a1 1 0 0 1 .24 1.27l-.75 1.3a1 1 0 0 1-1.2.45l-1.2-.4a6.8 6.8 0 0 1-1.6.9l-.3 1.2a1 1 0 0 1-.95.7h-1.5a1 1 0 0 1-.95-.7l-.3-1.2a6.8 6.8 0 0 1-1.6-.9l-1.2.4a1 1 0 0 1-1.2-.45l-.75-1.3a1 1 0 0 1 .24-1.27l.95-.8a6.9 6.9 0 0 1 0-1.65l-.95-.8a1 1 0 0 1-.24-1.27l.75-1.3a1 1 0 0 1 1.2-.45l1.2.4c.5-.37 1.03-.67 1.6-.9z" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="12" cy="12" r="2.4" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
+      <span>Opciones avanzadas</span>
+      <svg class="caret" viewBox="0 0 24 24" width="16" height="16"><path d="m6 9 6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    </button>
+
+    <div id="advPanel" class="adv-panel" hidden>
+      <div class="field">
+        <span class="label">Formato</span>
+        <div class="segmented" id="formatSeg">
+          <button class="seg" data-format="mp4">MP4</button>
+          <button class="seg" data-format="webm">WebM</button>
+        </div>
+        <small id="formatNote" class="hint">MP4 (H.264) reproduce en todos lados y permite saltar/ver duración.</small>
+      </div>
+
+      <div class="field">
+        <span class="label">Calidad</span>
+        <div class="segmented seg-3" id="qualitySeg">
+          <button class="seg" data-quality="high">Alta</button>
+          <button class="seg" data-quality="medium">Media</button>
+          <button class="seg" data-quality="low">Baja</button>
+        </div>
+        <small id="qualityNote" class="hint"></small>
+      </div>
+
+      <label class="field row toggle-row">
+        <span>
+          <span class="label">Copia de solo audio</span>
+          <small class="hint">Guarda además un archivo de audio aparte</small>
+        </span>
+        <span class="switch">
+          <input type="checkbox" id="audioCopy">
+          <span class="track"><span class="thumb"></span></span>
+        </span>
+      </label>
+
+      <div class="soon">
+        <span class="soon-title">Próximamente</span>
+        <div class="soon-item" title="Disponible pronto">
+          <span class="soon-ico"><svg viewBox="0 0 24 24" width="16" height="16"><path d="M4 5h16M4 12h10M4 19h7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="m17 16 1.4 1.4L22 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+          <span class="soon-text"><strong>Transcripción con IA</strong><small>Resumen y action items automáticos</small></span>
+          <span class="soon-badge">Pronto</span>
+        </div>
+        <div class="soon-item" title="Disponible pronto">
+          <span class="soon-ico"><svg viewBox="0 0 24 24" width="16" height="16"><path d="M8.6 13.5 15.4 17M15.4 7 8.6 10.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="18" cy="5.5" r="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="6" cy="12" r="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="18" cy="18.5" r="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/></svg></span>
+          <span class="soon-text"><strong>Compartir</strong><small>Link para compartir la grabación</small></span>
+          <span class="soon-badge">Pronto</span>
+        </div>
+      </div>
+    </div>
+
+    <button id="start" class="btn primary big">
+      <span class="rec-dot static"></span>
+      Grabar
+    </button>
+  </section>
+
+  <!-- ░░ ESTADO: RESULTADO ░░ -->
+  <section id="resultCard" class="card result" hidden>
+    <div class="result-icon">
+      <svg viewBox="0 0 24 24" width="26" height="26"><path d="m4 12 5 5 11-11" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+    <p id="resultText" class="result-text">Grabación lista</p>
+    <div class="result-actions">
+      <button id="save" class="btn primary">Guardar / Ver</button>
+      <button id="newRec" class="btn ghost">Nueva grabación</button>
+    </div>
+  </section>
+
+  <footer class="tip">
+    <svg viewBox="0 0 24 24" width="14" height="14"><path d="M12 3a6 6 0 0 1 6 6c0 2.5-1.5 3.8-2.5 5-.5.6-.5 1.5-.5 2H9c0-.5 0-1.4-.5-2C7.5 12.8 6 11.5 6 9a6 6 0 0 1 6-6zM9 21h6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    Usá auriculares para evitar eco. La reunión se sigue escuchando mientras grabás.
+  </footer>
+
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

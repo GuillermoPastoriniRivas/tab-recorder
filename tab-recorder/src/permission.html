@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Permiso de micrófono</title>
+  <style>
+    :root {
+      --txt: #eef0f6; --txt-dim: #9aa0b4; --txt-mute: #646b82;
+      --accent: #6d6bff; --accent-2: #c264ff; --ok: #38d39f; --rec: #ff4d57;
+      --grad: linear-gradient(135deg, var(--accent), var(--accent-2));
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: "Segoe UI", system-ui, sans-serif; color: var(--txt);
+      background: #0a0c14; min-height: 100vh; display: grid; place-items: center;
+      padding: 24px; position: relative; overflow: hidden; text-align: center;
+    }
+    .aurora {
+      position: fixed; inset: -40% -20% auto -20%; height: 360px; z-index: 0;
+      background:
+        radial-gradient(40% 60% at 25% 30%, rgba(109,107,255,.4), transparent 70%),
+        radial-gradient(45% 55% at 75% 20%, rgba(194,100,255,.3), transparent 70%);
+      filter: blur(16px); pointer-events: none;
+    }
+    .card {
+      position: relative; z-index: 1; max-width: 380px;
+      background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08);
+      border-radius: 18px; padding: 32px 28px; backdrop-filter: blur(12px);
+      box-shadow: 0 20px 60px rgba(0,0,0,.5);
+    }
+    .icon {
+      width: 64px; height: 64px; margin: 0 auto 18px; border-radius: 50%;
+      display: grid; place-items: center; color: #fff; background: var(--grad);
+      box-shadow: 0 10px 30px rgba(109,107,255,.45); transition: .3s;
+    }
+    .icon.ok { background: linear-gradient(135deg, var(--ok), #2bb6c4); box-shadow: 0 10px 30px rgba(56,211,159,.45); }
+    .icon.err { background: linear-gradient(135deg, var(--rec), #ff7a5c); box-shadow: 0 10px 30px rgba(255,77,87,.45); }
+    h1 { font-size: 18px; margin-bottom: 10px; }
+    p { font-size: 13.5px; color: var(--txt-dim); line-height: 1.55; margin-bottom: 20px; }
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      border: 0; cursor: pointer; font-family: inherit; font-weight: 700; color: #fff;
+      font-size: 14px; padding: 12px 22px; border-radius: 12px; background: var(--grad);
+      box-shadow: 0 8px 22px rgba(109,107,255,.4); transition: .15s;
+    }
+    .btn:hover { filter: brightness(1.08); }
+    .btn:active { transform: scale(.97); }
+    .btn.ghost { background: rgba(255,255,255,.08); box-shadow: none; border: 1px solid rgba(255,255,255,.12); }
+    .hint { font-size: 11.5px; color: var(--txt-mute); margin-top: 16px; }
+  </style>
+</head>
+<body>
+  <div class="aurora"></div>
+  <div class="card">
+    <div id="icon" class="icon">
+      <svg viewBox="0 0 24 24" width="30" height="30"><path d="M12 3a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3zM5 11a7 7 0 0 0 14 0M12 18v3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+    </div>
+    <h1 id="title">Habilitar micrófono</h1>
+    <p id="text">Para mezclar tu voz en la grabación, Chrome necesita tu permiso para usar el micrófono. Tocá el botón y elegí <b>Permitir</b>.</p>
+    <button id="action" class="btn">Habilitar micrófono</button>
+    <p class="hint" id="hint">El permiso queda guardado: solo tenés que hacer esto una vez.</p>
+  </div>
+  <script type="module" src="permission.js"></script>
+</body>
+</html>

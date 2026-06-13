@@ -1,0 +1,15 @@
+# Artefactos de build (el .zip de la store se regenera)
+dist/
+
+# Sistema operativo
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# Editores
+.vscode/
+.idea/
+*.swp
+
+# Node (por si se agrega tooling más adelante)
+node_modules/
