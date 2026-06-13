@@ -128,11 +128,7 @@
             <span class="spacer"></span>
             <span id="txMeta" class="muted"></span>
           </div>
-          <div id="txSummary" class="md"></div>
-          <details class="tx-transcript">
-            <summary>Ver transcripción completa</summary>
-            <div id="txTranscript" class="tx-transcript-body"></div>
-          </details>
+          <div id="txContent" class="md"></div>
         </div>
       </div>
     </div>
@@ -193,15 +189,15 @@
           <button class="rename-btn act-rename" type="button" title="Renombrar">
             <svg viewBox="0 0 24 24" width="14" height="14"><path d="M4 20h4l10-10-4-4L4 16v4zM14 6l4 4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </button>
-          <span class="badges"></span>
         </div>
         <div class="sub"></div>
+        <span class="badges"></span>
       </div>
       <div class="row-actions">
-        <button class="btn tiny ai act-transcribe">📝 Transcribir + Resumir</button>
+        <button class="btn tiny ai act-transcribe">📝 Transcribir</button>
+        <button class="btn tiny ai act-summary">✨ Resumen</button>
         <button class="btn tiny ghost act-play">▶ Reproducir</button>
         <button class="btn tiny primary act-save">Guardar como…</button>
-        <button class="btn tiny ghost act-open">Abrir</button>
         <button class="btn tiny danger-ghost act-del">Eliminar</button>
       </div>
     </article>

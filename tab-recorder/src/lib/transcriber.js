@@ -50,17 +50,28 @@ export async function checkBackend() {
   }
 }
 
-// ── job ──────────────────────────────────────────────────────────────────
-async function startJob(blob, filename, token) {
+// ── jobs ─────────────────────────────────────────────────────────────────
+async function postTranscribe(blob, filename, token) {
   const fd = new FormData();
   fd.append('file', blob, filename || 'grabacion.mp4');
-  const res = await fetch(`${BACKEND}/process`, {
+  const res = await fetch(`${BACKEND}/transcribe`, {
     method: 'POST',
     headers: { 'X-WhisperMeet-Token': token },
     body: fd,
   });
   if (res.status === 401) throw new Error('UNAUTHORIZED');
   if (!res.ok) throw new Error(`El backend rechazó el archivo (${res.status})`);
+  return (await res.json()).job_id;
+}
+
+async function postSummarize(text, name, token) {
+  const res = await fetch(`${BACKEND}/summarize`, {
+    method: 'POST',
+    headers: { 'X-WhisperMeet-Token': token, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text, source_name: name }),
+  });
+  if (res.status === 401) throw new Error('UNAUTHORIZED');
+  if (!res.ok) throw new Error(`No se pudo resumir (${res.status})`);
   return (await res.json()).job_id;
 }
 
@@ -79,24 +90,31 @@ function streamJob(jobId, token, onEvent) {
   });
 }
 
-// ── API pública ──────────────────────────────────────────────────────────
-// transcribeRecording(blob, filename, onEvent) → Promise<result>
-//   result = { language, duration, has_speech, transcript, summary, output_path }
-//   onEvent(ev) recibe {type:'progress', stage, fraction, message} en vivo.
-export async function transcribeRecording(blob, filename, onEvent) {
+// Corre `start` (que devuelve job_id), reemparejando el token si quedó viejo.
+async function runJob(start, onEvent) {
   let token = await getToken();
   let jobId;
   try {
-    jobId = await startJob(blob, filename, token);
+    jobId = await start(token);
   } catch (err) {
     if (err.message === 'UNAUTHORIZED') {
-      // Token viejo → reemparejamos una vez y reintentamos.
       await resetToken();
       token = await getToken();
-      jobId = await startJob(blob, filename, token);
+      jobId = await start(token);
     } else {
       throw err;
     }
   }
   return streamJob(jobId, token, onEvent);
+}
+
+// ── API pública ──────────────────────────────────────────────────────────
+// transcribeRecording(blob, filename, onEvent) → {language, duration, has_speech, transcript}
+export function transcribeRecording(blob, filename, onEvent) {
+  return runJob((token) => postTranscribe(blob, filename, token), onEvent);
+}
+
+// summarizeText(text, name, onEvent) → {summary}
+export function summarizeText(text, name, onEvent) {
+  return runJob((token) => postSummarize(text, name, token), onEvent);
 }

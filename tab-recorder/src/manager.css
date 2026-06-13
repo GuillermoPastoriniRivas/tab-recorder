@@ -198,12 +198,13 @@ body {
   box-shadow: 0 0 0 3px rgba(109,107,255,.18);
 }
 .sub { font-size: 12px; color: var(--txt-mute); margin-top: 3px; }
-.badges { display: inline-flex; gap: 5px; flex-shrink: 0; }
+.badges { display: inline-flex; gap: 5px; flex-wrap: wrap; margin-top: 6px; }
 .badge { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 99px; letter-spacing: .3px; }
 .badge.folder { background: rgba(56,211,159,.16); color: var(--ok); }
 .badge.warn { background: rgba(255,180,84,.16); color: var(--warn); }
 .badge.mode { background: rgba(109,107,255,.16); color: #b7b6ff; }
 .badge.tx { background: rgba(43,182,196,.18); color: #5fd6e0; }
+.badge.sum { background: rgba(194,100,255,.18); color: #d9a6ff; }
 
 .row-actions { display: flex; gap: 6px; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; }
 
@@ -291,6 +292,8 @@ body {
 
 .tx-result-actions { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
 .md { font-size: 13.5px; line-height: 1.6; max-height: 46vh; overflow-y: auto; }
+/* Transcripción: texto plano legible (no markdown). */
+.md.plain { white-space: pre-wrap; font-size: 12.5px; color: var(--txt-dim); }
 .md h2 { font-size: 16px; margin: 14px 0 6px; }
 .md h3 { font-size: 13.5px; color: var(--accent-2); margin: 14px 0 6px; text-transform: uppercase; letter-spacing: .4px; }
 .md ul { margin: 4px 0 4px 18px; }

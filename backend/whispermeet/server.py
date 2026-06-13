@@ -12,13 +12,13 @@ import json
 import threading
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query, UploadFile
+from fastapi import Body, Depends, FastAPI, Header, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
 from . import config, jobs, models
 
-app = FastAPI(title="WhisperMeet backend", version="0.1.3")
+app = FastAPI(title="WhisperMeet backend", version="0.1.4")
 
 app.add_middleware(
     CORSMiddleware,
@@ -122,16 +122,26 @@ def models_download() -> dict:
     return {"started": _dl_state["downloading"], "ready": models.models_ready()}
 
 
-@app.post("/process", dependencies=[Depends(auth_header)])
-async def process(file: UploadFile) -> dict:
+@app.post("/transcribe", dependencies=[Depends(auth_header)])
+async def transcribe_ep(file: UploadFile) -> dict:
     # Guardamos el upload en disco para que faster-whisper/PyAV lo lean.
     safe_name = Path(file.filename or "grabacion.mp4").name
-    dest = config.TMP_DIR / f"{safe_name}"
+    dest = config.TMP_DIR / safe_name
     with open(dest, "wb") as f:
         while chunk := await file.read(1024 * 1024):
             f.write(chunk)
 
-    job = jobs.create(source_name=safe_name, media_path=str(dest))
+    job = jobs.create_transcribe(source_name=safe_name, media_path=str(dest))
+    return {"job_id": job.id}
+
+
+@app.post("/summarize", dependencies=[Depends(auth_header)])
+def summarize_ep(payload: dict = Body(...)) -> dict:
+    text = (payload.get("text") or "").strip()
+    name = payload.get("source_name") or "reunion"
+    if not text:
+        raise HTTPException(status_code=400, detail="Falta el texto de la transcripción")
+    job = jobs.create_summarize(source_name=name, text=text)
     return {"job_id": job.id}
 
 

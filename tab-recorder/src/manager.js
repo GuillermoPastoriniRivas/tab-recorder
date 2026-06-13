@@ -3,7 +3,7 @@ import { RECORDING_STATUS } from './lib/constants.js';
 import { MSG, TARGET } from './lib/messages.js';
 import { formatDuration, formatBytes, formatDate, timestampName } from './lib/util.js';
 import { fixWebmDuration } from './lib/webm-duration.js';
-import { transcribeRecording, checkBackend, BACKEND_DOWNLOAD_URL } from './lib/transcriber.js';
+import { transcribeRecording, summarizeText, checkBackend, BACKEND_DOWNLOAD_URL } from './lib/transcriber.js';
 
 // Ensambla el blob final; en WebM inyecta la duración para que sea seekable.
 async function buildBlob(rec) {
@@ -25,8 +25,7 @@ const el = {
   backendChip: $('backendChip'), backendChipText: $('backendChipText'),
   tx: $('tx'), txTitle: $('txTitle'), txClose: $('txClose'),
   txProgress: $('txProgress'), txStage: $('txStage'), txBarFill: $('txBarFill'), txMsg: $('txMsg'),
-  txError: $('txError'), txResult: $('txResult'), txSummary: $('txSummary'),
-  txTranscript: $('txTranscript'), txMeta: $('txMeta'),
+  txError: $('txError'), txResult: $('txResult'), txContent: $('txContent'), txMeta: $('txMeta'),
   txCopy: $('txCopy'), txDownload: $('txDownload'), txRegen: $('txRegen'),
   install: $('install'), installClose: $('installClose'), installDownload: $('installDownload'),
   installChip: $('installChip'), installChipText: $('installChipText'),
@@ -133,18 +132,6 @@ function downloadBlob(blob, name) {
   a.href = url; a.download = name;
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 15000);
-}
-
-// Abre la grabación en una pestaña nueva (reproductor del navegador a pantalla
-// completa). Nota: Chrome no permite "revelar en carpeta" desde una extensión
-// (la File System Access API oculta las rutas), así que abrimos el archivo.
-async function openInTab(rec) {
-  const blob = await buildBlob(rec);
-  const url = URL.createObjectURL(blob);
-  window.open(url, '_blank');
-  if (rec.savedToFolder) toast(`En tu carpeta: ${rec.name}`);
-  // No revocamos enseguida: la pestaña nueva necesita el blob para reproducir.
-  setTimeout(() => URL.revokeObjectURL(url), 10 * 60 * 1000);
 }
 
 // Borra el archivo del disco (si la grabación se guardó en la carpeta). La FSA
@@ -318,14 +305,19 @@ function renderMarkdown(md) {
   return html;
 }
 
-let lastResult = null;
+// Transcripción y resumen son DOS cosas separadas. El modal muestra una u
+// otra según `lastMode`. Se guardan por separado en la grabación:
+//   rec.transcription = { language, duration, has_speech, transcript }
+//   rec.summary       = "markdown del resumen"
+let lastRec = null;
 let lastRecName = '';
-let lastRec = null;   // grabación actual del modal (para Regenerar)
+let lastMode = 'summary';   // 'summary' | 'transcript'
 
-function openTx(name) {
-  lastResult = null;
+const fmtDur = (s) => `${Math.floor((s || 0) / 60)}m ${Math.round((s || 0) % 60)}s`;
+
+function openTxProgress(name, label) {
   lastRecName = name || 'reunion';
-  el.txTitle.textContent = `Transcribir + Resumir — ${lastRecName}`;
+  el.txTitle.textContent = `${label} — ${lastRecName}`;
   el.txProgress.hidden = false;
   el.txResult.hidden = true;
   el.txError.hidden = true;
@@ -340,8 +332,7 @@ function updateTxProgress(ev) {
   if (ev.type !== 'progress') return;
   el.txStage.textContent = STAGE_LABEL[ev.stage] || 'Procesando…';
   el.txMsg.textContent = ev.message || '';
-  const pct = Math.round((ev.fraction || 0) * 100);
-  el.txBarFill.style.width = `${pct}%`;
+  el.txBarFill.style.width = `${Math.round((ev.fraction || 0) * 100)}%`;
 }
 
 function showTxError(message) {
@@ -352,73 +343,112 @@ function showTxError(message) {
     `<p class="muted">Verificá que la app <b>WhisperMeet</b> esté corriendo en la bandeja del sistema.</p>`;
 }
 
-function renderTxResult(result) {
-  lastResult = result;
-  el.txProgress.hidden = true;
-  el.txError.hidden = true;
-  el.txResult.hidden = false;
-
-  const mins = Math.floor((result.duration || 0) / 60);
-  const secs = Math.round((result.duration || 0) % 60);
-  el.txMeta.textContent = `Idioma: ${result.language} · ${mins}m ${secs}s`;
-
-  if (!result.has_speech) {
-    el.txSummary.innerHTML = '<p><b>No se detectó voz en el audio.</b> ' +
-      'Puede que la grabación no haya capturado el sonido del tab/micrófono.</p>';
-    el.txTranscript.textContent = result.transcript || '(vacío)';
-    return;
+// ── ver transcripción ──
+function showTranscript(rec) {
+  lastRec = rec; lastMode = 'transcript'; lastRecName = rec.name || 'reunion';
+  el.txTitle.textContent = `Transcripción — ${lastRecName}`;
+  el.txProgress.hidden = true; el.txError.hidden = true; el.txResult.hidden = false; el.tx.hidden = false;
+  const tr = rec.transcription || {};
+  el.txMeta.textContent = `Idioma: ${tr.language || '?'} · ${fmtDur(tr.duration)}`;
+  if (!tr.has_speech) {
+    el.txContent.classList.remove('plain');
+    el.txContent.innerHTML = '<p><b>No se detectó voz en el audio.</b> Puede que la grabación no haya capturado el sonido del tab/micrófono.</p>';
+  } else {
+    el.txContent.classList.add('plain');
+    el.txContent.textContent = tr.transcript || '(vacío)';
   }
-  el.txSummary.innerHTML = renderMarkdown(result.summary);
-  el.txTranscript.textContent = result.transcript || '(vacío)';
+  el.txCopy.textContent = 'Copiar';
+  el.txRegen.textContent = '↻ Re-transcribir';
 }
 
-function buildMarkdownFile(result, name) {
-  const stem = (name || 'reunion').replace(/\.[^.]+$/, '');
-  return `# ${stem}\n\n*Idioma: ${result.language} · Duración: ${Math.round(result.duration)}s*\n\n` +
-    `${result.summary}\n\n---\n\n## Transcripción completa\n\n${result.transcript}\n`;
+// ── ver resumen ──
+function showSummary(rec) {
+  lastRec = rec; lastMode = 'summary'; lastRecName = rec.name || 'reunion';
+  el.txTitle.textContent = `Resumen — ${lastRecName}`;
+  el.txProgress.hidden = true; el.txError.hidden = true; el.txResult.hidden = false; el.tx.hidden = false;
+  el.txMeta.textContent = rec.transcription ? `Idioma: ${rec.transcription.language}` : '';
+  el.txContent.classList.remove('plain');
+  el.txContent.innerHTML = renderMarkdown(rec.summary || '');
+  el.txCopy.textContent = 'Copiar resumen';
+  el.txRegen.textContent = '↻ Regenerar';
+}
+
+function currentText() {
+  return lastMode === 'summary' ? (lastRec?.summary || '') : (lastRec?.transcription?.transcript || '');
+}
+function currentMdFile() {
+  const stem = (lastRecName || 'reunion').replace(/\.[^.]+$/, '');
+  if (lastMode === 'summary') return `# ${stem} — resumen\n\n${lastRec?.summary || ''}\n`;
+  const tr = lastRec?.transcription || {};
+  return `# ${stem} — transcripción\n\n*Idioma: ${tr.language}*\n\n${tr.transcript || ''}\n`;
 }
 
 el.txCopy.onclick = async () => {
-  if (!lastResult) return;
-  try { await navigator.clipboard.writeText(lastResult.summary || ''); toast('Resumen copiado ✓'); }
+  try { await navigator.clipboard.writeText(currentText()); toast('Copiado ✓'); }
   catch { toast('No se pudo copiar'); }
 };
 el.txDownload.onclick = () => {
-  if (!lastResult) return;
-  const md = buildMarkdownFile(lastResult, lastRecName);
-  downloadBlob(new Blob([md], { type: 'text/markdown' }), `${lastRecName.replace(/\.[^.]+$/, '')}.md`);
+  const stem = (lastRecName || 'reunion').replace(/\.[^.]+$/, '');
+  const suffix = lastMode === 'summary' ? 'resumen' : 'transcripcion';
+  downloadBlob(new Blob([currentMdFile()], { type: 'text/markdown' }), `${stem}_${suffix}.md`);
 };
-el.txRegen.onclick = () => { if (lastRec) transcribeFlow(lastRec); };
+el.txRegen.onclick = () => {
+  if (!lastRec) return;
+  if (lastMode === 'transcript') transcribeFlow(lastRec, true);
+  else summaryFlow(lastRec, true);
+};
 el.txClose.onclick = closeTx;
 el.tx.onclick = (e) => { if (e.target === el.tx) closeTx(); };
 
-// Abre el modal mostrando una transcripción YA generada (guardada en la
-// grabación). No toca el backend: se puede leer offline cuando quieras.
-function showSavedTranscription(rec) {
-  lastRec = rec;
-  lastRecName = rec.name || 'reunion';
-  el.txTitle.textContent = `Transcripción — ${lastRecName}`;
-  el.txProgress.hidden = true;
-  el.txError.hidden = true;
-  el.tx.hidden = false;
-  renderTxResult(rec.transcription);
+// Asegura que haya transcripción (la genera si falta) y la devuelve. Persiste.
+async function ensureTranscription(rec) {
+  if (rec.transcription) return rec.transcription;
+  const tr = await transcribeRecording(await buildBlob(rec), rec.name, updateTxProgress);
+  rec.transcription = tr;
+  await db.updateRecording(rec.id, { transcription: tr });
+  render();
+  return tr;
 }
 
-async function transcribeFlow(rec) {
-  // Chequeo rápido: ¿está el backend? Si no, mostramos el onboarding de
-  // instalación en vez de un error seco.
+// ── TRANSCRIBIR (o ver la transcripción ya hecha) ──
+async function transcribeFlow(rec, force = false) {
+  if (rec.transcription && !force) { showTranscript(rec); return; }
   const info = await refreshBackendStatus();
   if (!info) { openInstall(); return; }
-  lastRec = rec;
-  openTx(rec.name);
+  lastRec = rec; lastMode = 'transcript';
+  openTxProgress(rec.name, 'Transcribiendo');
   try {
-    const blob = await buildBlob(rec);
-    const result = await transcribeRecording(blob, rec.name, updateTxProgress);
-    renderTxResult(result);
-    // Persistimos el resultado para poder re-leerlo sin regenerar.
-    await db.updateRecording(rec.id, { transcription: result });
+    const tr = await transcribeRecording(await buildBlob(rec), rec.name, updateTxProgress);
+    rec.transcription = tr;
+    await db.updateRecording(rec.id, { transcription: tr });
     render();
+    showTranscript(rec);
     toast('Transcripción lista ✓');
+  } catch (err) {
+    showTxError(err?.message || String(err));
+  }
+}
+
+// ── RESUMIR (o ver el resumen ya hecho). Si falta transcripción, la hace antes. ──
+async function summaryFlow(rec, force = false) {
+  if (rec.summary && !force) { showSummary(rec); return; }
+  const info = await refreshBackendStatus();
+  if (!info) { openInstall(); return; }
+  lastRec = rec; lastMode = 'summary';
+  openTxProgress(rec.name, 'Resumiendo');
+  try {
+    const tr = await ensureTranscription(rec);
+    if (!tr.has_speech || !(tr.transcript || '').trim()) {
+      rec.summary = '## Resumen\nNo se detectó voz en el audio, no hay nada para resumir.';
+      await db.updateRecording(rec.id, { summary: rec.summary });
+      render(); showSummary(rec); return;
+    }
+    const sres = await summarizeText(tr.transcript, rec.name, updateTxProgress);
+    rec.summary = sres.summary;
+    await db.updateRecording(rec.id, { summary: sres.summary });
+    render();
+    showSummary(rec);
+    toast('Resumen listo ✓');
   } catch (err) {
     showTxError(err?.message || String(err));
   }
@@ -587,6 +617,7 @@ async function render() {
       `<span class="badge mode">${rec.mode === 'audio' ? 'AUDIO' : 'VIDEO'}</span>` +
       (rec.savedToFolder ? '<span class="badge folder">EN CARPETA</span>' : '') +
       (rec.transcription ? '<span class="badge tx">TRANSCRITA</span>' : '') +
+      (rec.summary ? '<span class="badge sum">RESUMIDA</span>' : '') +
       (incompleteRec ? '<span class="badge warn">INCOMPLETA</span>' : '');
 
     // selección por fila (modo selección)
@@ -611,19 +642,17 @@ async function render() {
 
     node.querySelector('.act-rename').onclick = () => renameRecording(rec, node.querySelector('.name'));
 
-    // Si ya tiene transcripción, el botón pasa a "Ver resumen" (lectura offline).
+    // Transcripción y resumen, separados. Cada botón genera o muestra lo suyo.
     const txBtn = node.querySelector('.act-transcribe');
-    if (rec.transcription) {
-      txBtn.textContent = '📄 Ver resumen';
-      txBtn.onclick = () => showSavedTranscription(rec);
-    } else {
-      txBtn.textContent = '📝 Transcribir + Resumir';
-      txBtn.onclick = () => transcribeFlow(rec).catch((e) => showTxError(e?.message || String(e)));
-    }
+    txBtn.textContent = rec.transcription ? '📄 Transcripción' : '📝 Transcribir';
+    txBtn.onclick = () => transcribeFlow(rec).catch((e) => showTxError(e?.message || String(e)));
+
+    const sumBtn = node.querySelector('.act-summary');
+    sumBtn.textContent = rec.summary ? '✨ Ver resumen' : '✨ Resumen';
+    sumBtn.onclick = () => summaryFlow(rec).catch((e) => showTxError(e?.message || String(e)));
 
     node.querySelector('.act-play').onclick = () => play(rec).catch(() => toast('No se pudo reproducir'));
     node.querySelector('.act-save').onclick = () => saveAs(rec);
-    node.querySelector('.act-open').onclick = () => openInTab(rec).catch(() => toast('No se pudo abrir'));
     node.querySelector('.act-del').onclick = async () => {
       const onDisk = rec.savedToFolder;
       const msg = onDisk

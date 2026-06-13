@@ -1,8 +1,11 @@
 """Cola de jobs y orquestación del pipeline.
 
+Hay dos tipos de job, separados:
+  - "transcribe": sube un video → transcripción (Whisper).
+  - "summarize":  recibe el texto de una transcripción → resumen (LLM).
+
 Cada job corre en un hilo (whisper y llama.cpp son bloqueantes) y publica
-eventos de progreso en una cola que el endpoint SSE va drenando hacia la
-extensión.
+eventos de progreso en una cola que el endpoint SSE drena hacia la extensión.
 """
 from __future__ import annotations
 
@@ -23,9 +26,11 @@ _SENTINEL = object()  # marca el fin del stream de eventos de un job
 @dataclass
 class Job:
     id: str
+    kind: str  # "transcribe" | "summarize"
     source_name: str
-    media_path: str
-    status: str = "queued"  # queued | running | done | error
+    media_path: Optional[str] = None  # para "transcribe"
+    text: Optional[str] = None        # para "summarize"
+    status: str = "queued"            # queued | running | done | error
     stage: str = ""
     error: Optional[str] = None
     result: Optional[dict[str, Any]] = None
@@ -56,30 +61,12 @@ def _make_progress_cb(job: Job, stage: str):
 def _run(job: Job) -> None:
     try:
         job.status = "running"
-
-        # 1) Modelos (solo descarga si faltan)
-        if not models.models_ready():
-            models.ensure_models(_make_progress_cb(job, "download"))
-
-        # 2) Transcripción
-        _emit(job, type="progress", stage="transcribe", fraction=0.0, message="Iniciando transcripción…")
-        tr = transcribe.transcribe(job.media_path, _make_progress_cb(job, "transcribe"))
-
-        # 3) Resumen
-        _emit(job, type="progress", stage="summarize", fraction=0.0, message="Iniciando resumen…")
-        summary_md = summarize.summarize(tr.text, _make_progress_cb(job, "summarize"))
-
-        # 4) Guardar .md
-        md_path = _write_markdown(job.source_name, tr, summary_md)
-
-        job.result = {
-            "language": tr.language,
-            "duration": tr.duration,
-            "has_speech": bool(tr.text.strip()),
-            "transcript": tr.text,
-            "summary": summary_md,
-            "output_path": str(md_path),
-        }
+        if job.kind == "transcribe":
+            _run_transcribe(job)
+        elif job.kind == "summarize":
+            _run_summarize(job)
+        else:
+            raise ValueError(f"Tipo de job desconocido: {job.kind}")
         job.status = "done"
         _emit(job, type="done", result=job.result)
     except Exception as exc:  # noqa: BLE001 — reportamos cualquier fallo al cliente
@@ -90,30 +77,76 @@ def _run(job: Job) -> None:
         job.events.put(_SENTINEL)
 
 
-def _write_markdown(source_name: str, tr: "transcribe.TranscriptResult", summary_md: str) -> Path:
+def _run_transcribe(job: Job) -> None:
+    if not models.whisper_ready():
+        models.ensure_whisper(_make_progress_cb(job, "download"))
+
+    _emit(job, type="progress", stage="transcribe", fraction=0.0, message="Iniciando transcripción…")
+    tr = transcribe.transcribe(job.media_path, _make_progress_cb(job, "transcribe"))
+
+    out = _write_text(job.source_name, "transcripcion", _transcript_md(job.source_name, tr))
+    job.result = {
+        "language": tr.language,
+        "duration": tr.duration,
+        "has_speech": bool(tr.text.strip()),
+        "transcript": tr.text,
+        "output_path": str(out),
+    }
+
+
+def _run_summarize(job: Job) -> None:
+    if not models.llm_ready():
+        models.ensure_llm(_make_progress_cb(job, "download"))
+
+    _emit(job, type="progress", stage="summarize", fraction=0.0, message="Iniciando resumen…")
+    summary_md = summarize.summarize(job.text or "", _make_progress_cb(job, "summarize"))
+
+    out = _write_text(job.source_name, "resumen", _summary_md(job.source_name, summary_md))
+    job.result = {"summary": summary_md, "output_path": str(out)}
+
+
+# ---------------------------------------------------------------------------
+# Archivos .md en la carpeta de salida (uno por transcripción, otro por resumen)
+# ---------------------------------------------------------------------------
+def _write_text(source_name: str, suffix: str, body: str) -> Path:
     stamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     stem = Path(source_name).stem or "reunion"
-    out = config.OUTPUTS_DIR / f"{stem}_{stamp}.md"
-
-    mins = int(tr.duration // 60)
-    secs = int(tr.duration % 60)
-    body = (
-        f"# {stem}\n\n"
-        f"*Idioma: {tr.language} · Duración: {mins}m {secs}s · Generado: {stamp}*\n\n"
-        f"{summary_md}\n\n"
-        f"---\n\n"
-        f"## Transcripción completa\n\n{tr.text}\n"
-    )
+    out = config.OUTPUTS_DIR / f"{stem}_{suffix}_{stamp}.md"
     out.write_text(body, encoding="utf-8")
     return out
 
 
-def create(source_name: str, media_path: str) -> Job:
-    job = Job(id=uuid.uuid4().hex, source_name=source_name, media_path=media_path)
+def _transcript_md(source_name: str, tr: "transcribe.TranscriptResult") -> str:
+    stem = Path(source_name).stem or "reunion"
+    mins, secs = int(tr.duration // 60), int(tr.duration % 60)
+    return (
+        f"# {stem} — transcripción\n\n"
+        f"*Idioma: {tr.language} · Duración: {mins}m {secs}s*\n\n"
+        f"{tr.text}\n"
+    )
+
+
+def _summary_md(source_name: str, summary_md: str) -> str:
+    stem = Path(source_name).stem or "reunion"
+    return f"# {stem} — resumen\n\n{summary_md}\n"
+
+
+# ---------------------------------------------------------------------------
+# Creación de jobs
+# ---------------------------------------------------------------------------
+def _start(job: Job) -> Job:
     with _lock:
         _jobs[job.id] = job
     threading.Thread(target=_run, args=(job,), daemon=True).start()
     return job
+
+
+def create_transcribe(source_name: str, media_path: str) -> Job:
+    return _start(Job(id=uuid.uuid4().hex, kind="transcribe", source_name=source_name, media_path=media_path))
+
+
+def create_summarize(source_name: str, text: str) -> Job:
+    return _start(Job(id=uuid.uuid4().hex, kind="summarize", source_name=source_name, text=text))
 
 
 def stream(job: Job):

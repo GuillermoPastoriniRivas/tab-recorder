@@ -99,6 +99,20 @@ def _download_llm(progress_cb: ProgressCb) -> None:
     _stream_download(url, config.LLM_PATH, on_progress)
 
 
+def ensure_whisper(progress_cb: ProgressCb = None) -> None:
+    """Garantiza solo el modelo de transcripción."""
+    _download_whisper(progress_cb)
+    if progress_cb:
+        progress_cb(1.0, "Modelo de transcripción listo ✓")
+
+
+def ensure_llm(progress_cb: ProgressCb = None) -> None:
+    """Garantiza solo el modelo de resumen."""
+    _download_llm(progress_cb)
+    if progress_cb:
+        progress_cb(1.0, "Modelo de resumen listo ✓")
+
+
 def ensure_models(progress_cb: ProgressCb = None) -> None:
     """Garantiza que ambos modelos estén disponibles localmente."""
     _download_whisper(progress_cb)
