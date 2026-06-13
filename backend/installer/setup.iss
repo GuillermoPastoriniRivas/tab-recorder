@@ -4,7 +4,7 @@
 ; que deja la app en dist\WhisperMeet\.
 
 #define AppName "WhisperMeet"
-#define AppVersion "0.1.0"
+#define AppVersion "0.1.1"
 #define AppPublisher "WhisperMeet"
 #define AppExeName "WhisperMeet.exe"
 

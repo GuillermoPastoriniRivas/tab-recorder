@@ -30,6 +30,8 @@ const el = {
   txCopy: $('txCopy'), txDownload: $('txDownload'), txRegen: $('txRegen'),
   install: $('install'), installClose: $('installClose'), installDownload: $('installDownload'),
   installChip: $('installChip'), installChipText: $('installChipText'),
+  installOffState: $('installOffState'), installProgress: $('installProgress'),
+  installProgressLabel: $('installProgressLabel'), installBar: $('installBar'),
 };
 
 const ICONS = {
@@ -227,27 +229,45 @@ const STAGE_LABEL = {
 // Estado del servicio local (app de bandeja). Pinta el chip del header y, si
 // está abierto, el mini-chip del modal de instalación (auto-cierra al detectar).
 let backendOnline = false;
+let modelsReady = false;
+const pct = (f) => Math.round((f || 0) * 100);
+
 function paintChip(chip, textEl, info) {
   chip.classList.remove('checking', 'on', 'off');
-  if (info) {
-    chip.classList.add('on');
-    textEl.textContent = info.models_ready ? 'Backend activo' : 'Backend activo · bajando modelos';
-  } else {
-    chip.classList.add('off');
-    textEl.textContent = 'Backend desactivado';
+  if (!info) { chip.classList.add('off'); textEl.textContent = 'Backend desactivado'; return; }
+  chip.classList.add('on');
+  if (info.models_ready) textEl.textContent = 'Backend activo';
+  else if (info.models && info.models.downloading) textEl.textContent = `Backend activo · modelos ${pct(info.models.fraction)}%`;
+  else textEl.textContent = 'Backend activo · preparando…';
+}
+
+// Estados del modal de instalación: A) descargar  B) preparando modelos.
+function updateInstallModal(info) {
+  if (el.install.hidden) return;
+  const on = !!info;
+  const ready = on && info.models_ready;
+  el.installOffState.hidden = on;            // ya instalado → ocultamos la descarga
+  el.installProgress.hidden = !on || ready;  // mostramos la barra mientras prepara
+  if (on && !ready) {
+    const md = info.models || {};
+    el.installProgressLabel.textContent = md.error ? `Error: ${md.error}` : (md.message || 'Preparando modelos de IA…');
+    el.installBar.style.width = `${pct(md.fraction)}%`;
   }
 }
+
 async function refreshBackendStatus() {
   const info = await checkBackend();
   paintChip(el.backendChip, el.backendChipText, info);
-  if (!el.install.hidden) paintChip(el.installChip, el.installChipText, info);
+  if (!el.install.hidden) { paintChip(el.installChip, el.installChipText, info); updateInstallModal(info); }
 
-  // Transición apagado → encendido con el modal de instalación abierto:
-  // lo cerramos y avisamos.
-  if (info && !backendOnline && !el.install.hidden) {
-    closeInstall();
-    toast('Backend detectado ✓');
+  const ready = !!(info && info.models_ready);
+  // Avisamos y cerramos el modal cuando está TODO listo (no apenas responde el
+  // backend: los modelos pueden seguir bajando).
+  if (ready && !modelsReady && !el.install.hidden) {
+    toast('¡Todo listo para transcribir! ✓');
+    setTimeout(closeInstall, 1500);
   }
+  modelsReady = ready;
   backendOnline = !!info;
   return info;
 }

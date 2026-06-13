@@ -76,6 +76,42 @@ def _make_icon_image():
     return img
 
 
+def _status_text() -> str:
+    """Texto de estado para el tooltip y el menú de la bandeja."""
+    from . import models
+    from .server import _dl_state
+
+    if models.models_ready():
+        return f"Listo · escuchando en :{config.PORT}"
+    if _dl_state.get("downloading"):
+        pct = int(_dl_state.get("fraction", 0) * 100)
+        return f"Preparando modelos… {pct}%"
+    if _dl_state.get("error"):
+        return "Error al descargar modelos"
+    return "Iniciando…"
+
+
+def _monitor(icon) -> None:
+    """Refleja el estado en el tooltip y avisa una vez cuando queda listo."""
+    import time
+
+    from . import models
+
+    notified = False
+    while True:
+        try:
+            icon.title = f"{config.APP_NAME} — {_status_text()}"
+            if models.models_ready() and not notified:
+                notified = True
+                try:
+                    icon.notify("Modelos listos. Ya podés transcribir tus grabaciones.", config.APP_NAME)
+                except Exception:  # noqa: BLE001 — la notificación es best-effort
+                    pass
+        except Exception:  # noqa: BLE001
+            pass
+        time.sleep(2)
+
+
 def run() -> None:
     import pystray
 
@@ -96,7 +132,8 @@ def run() -> None:
         icon.stop()
 
     menu = pystray.Menu(
-        pystray.MenuItem(f"{config.APP_NAME} — escuchando en {config.PORT}", None, enabled=False),
+        # Texto dinámico: muestra "Preparando modelos… NN%" o "Listo".
+        pystray.MenuItem(lambda item: f"{config.APP_NAME} — {_status_text()}", None, enabled=False),
         pystray.MenuItem("Abrir carpeta de resúmenes", on_open_outputs),
         pystray.MenuItem("Ver estado (/health)", on_health),
         pystray.MenuItem(
@@ -107,7 +144,8 @@ def run() -> None:
         pystray.MenuItem("Salir", on_quit),
     )
 
-    icon = pystray.Icon(config.APP_NAME, _make_icon_image(), config.APP_NAME, menu)
+    icon = pystray.Icon(config.APP_NAME, _make_icon_image(), f"{config.APP_NAME} — iniciando…", menu)
+    threading.Thread(target=_monitor, args=(icon,), daemon=True).start()
     icon.run()
 
 

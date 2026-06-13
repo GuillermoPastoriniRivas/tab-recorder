@@ -18,7 +18,7 @@ from fastapi.responses import StreamingResponse
 
 from . import config, jobs, models
 
-app = FastAPI(title="WhisperMeet backend", version="0.1.0")
+app = FastAPI(title="WhisperMeet backend", version="0.1.1")
 
 app.add_middleware(
     CORSMiddleware,
@@ -69,6 +69,14 @@ def health() -> dict:
         "status": "ok",
         "version": app.version,
         "models_ready": models.models_ready(),
+        # Progreso de descarga de modelos (sin token, no es sensible) para que
+        # la extensión muestre la barra y el estado.
+        "models": {
+            "downloading": _dl_state["downloading"],
+            "fraction": _dl_state["fraction"],
+            "message": _dl_state["message"],
+            "error": _dl_state["error"],
+        },
     }
 
 

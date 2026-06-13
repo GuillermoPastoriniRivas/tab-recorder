@@ -151,16 +151,26 @@
           (<b>WhisperMeet</b>) que se ejecuta en tu propia PC — 100% local, sin nube.
           Se instala una sola vez.
         </p>
-        <a id="installDownload" class="btn primary install-dl" href="#" target="_blank" rel="noopener">⬇ Descargar backend (.exe)</a>
-        <ol class="install-steps">
-          <li>Descargá y ejecutá el instalador.</li>
-          <li>Se abre solo (vas a ver un ícono en la bandeja del sistema).</li>
-          <li>La <b>primera vez</b> baja los modelos de IA (~2.3&nbsp;GB). Puede tardar.</li>
-          <li>Este indicador se pone <b>verde</b> automáticamente. ¡Listo!</li>
-        </ol>
+        <!-- Estado A: backend no instalado / apagado -->
+        <div id="installOffState">
+          <a id="installDownload" class="btn primary install-dl" href="#" target="_blank" rel="noopener">⬇ Descargar backend (.exe)</a>
+          <ol class="install-steps">
+            <li>Descargá y ejecutá el instalador.</li>
+            <li>Se abre solo (vas a ver un ícono en la bandeja del sistema).</li>
+            <li>La <b>primera vez</b> baja los modelos de IA (~2.3&nbsp;GB). Acá vas a ver el progreso.</li>
+            <li>Cuando termine, te avisamos. ¡Listo!</li>
+          </ol>
+        </div>
+
+        <!-- Estado B: instalado, preparando modelos -->
+        <div id="installProgress" hidden>
+          <div id="installProgressLabel" class="install-progress-label">Preparando modelos de IA…</div>
+          <div class="tx-bar"><div id="installBar" class="tx-bar-fill"></div></div>
+          <p class="muted install-progress-note">Esto pasa una sola vez (~2.3&nbsp;GB). Podés cerrar esta ventana y seguir; cuando esté listo el indicador se pone verde y te llega un aviso.</p>
+        </div>
+
         <div class="install-status">
           <span id="installChip" class="backend-chip checking"><span class="dot"></span><span id="installChipText">Verificando…</span></span>
-          <span class="muted">Esperando a que el servicio arranque…</span>
         </div>
         <p class="install-note muted">Solo Windows por ahora · descarga directa, sin cuenta.<br>Si Windows muestra un aviso de seguridad: <b>Más información → Ejecutar de todas formas</b> (el instalador no está firmado todavía).</p>
       </div>
