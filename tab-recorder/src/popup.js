@@ -224,6 +224,8 @@ function showCard(name) {
   el.setupCard.hidden = name !== 'setup';
   el.liveCard.hidden = name !== 'live';
   el.resultCard.hidden = name !== 'result';
+  // El punto rojo del logo se muestra solo mientras se graba (card 'live').
+  document.querySelector('.logo')?.classList.toggle('recording', name === 'live');
 }
 
 function renderState(state) {

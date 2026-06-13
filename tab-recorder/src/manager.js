@@ -1,5 +1,6 @@
 import { db } from './lib/db.js';
 import { RECORDING_STATUS } from './lib/constants.js';
+import { MSG, TARGET } from './lib/messages.js';
 import { formatDuration, formatBytes, formatDate, timestampName } from './lib/util.js';
 import { fixWebmDuration } from './lib/webm-duration.js';
 import { transcribeRecording, checkBackend, BACKEND_DOWNLOAD_URL } from './lib/transcriber.js';
@@ -26,7 +27,7 @@ const el = {
   txProgress: $('txProgress'), txStage: $('txStage'), txBarFill: $('txBarFill'), txMsg: $('txMsg'),
   txError: $('txError'), txResult: $('txResult'), txSummary: $('txSummary'),
   txTranscript: $('txTranscript'), txMeta: $('txMeta'),
-  txCopy: $('txCopy'), txDownload: $('txDownload'),
+  txCopy: $('txCopy'), txDownload: $('txDownload'), txRegen: $('txRegen'),
   install: $('install'), installClose: $('installClose'), installDownload: $('installDownload'),
   installChip: $('installChip'), installChipText: $('installChipText'),
 };
@@ -123,13 +124,44 @@ el.clearFolder.onclick = async () => {
   toast('Carpeta quitada');
 };
 
-// ── guardado / descarga ────────────────────────────────────────────────────
+// ── guardado / descarga / abrir ─────────────────────────────────────────────
 function downloadBlob(blob, name) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url; a.download = name;
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 15000);
+}
+
+// Abre la grabación en una pestaña nueva (reproductor del navegador a pantalla
+// completa). Nota: Chrome no permite "revelar en carpeta" desde una extensión
+// (la File System Access API oculta las rutas), así que abrimos el archivo.
+async function openInTab(rec) {
+  const blob = await buildBlob(rec);
+  const url = URL.createObjectURL(blob);
+  window.open(url, '_blank');
+  if (rec.savedToFolder) toast(`En tu carpeta: ${rec.name}`);
+  // No revocamos enseguida: la pestaña nueva necesita el blob para reproducir.
+  setTimeout(() => URL.revokeObjectURL(url), 10 * 60 * 1000);
+}
+
+// Borra el archivo del disco (si la grabación se guardó en la carpeta). La FSA
+// sí permite borrar entradas del directorio para el que tenemos permiso.
+async function deleteFromDisk(rec) {
+  try {
+    const dir = await db.getSetting('dirHandle');
+    if (!dir) return;
+    let perm = 'denied';
+    try { perm = await dir.queryPermission({ mode: 'readwrite' }); } catch {}
+    if (perm !== 'granted') {
+      try { perm = await dir.requestPermission({ mode: 'readwrite' }); } catch {}
+    }
+    if (perm !== 'granted') { toast('Sin permiso para borrar el archivo del disco'); return; }
+    await dir.removeEntry(rec.name);
+  } catch (err) {
+    // Si el archivo ya no estaba, seguimos: igual se borra de la biblioteca.
+    console.warn('No se pudo borrar el archivo del disco', err);
+  }
 }
 
 function acceptFor(name) {
@@ -227,6 +259,24 @@ function closeInstall() { el.install.hidden = true; }
 el.installClose.onclick = closeInstall;
 el.install.onclick = (e) => { if (e.target === el.install) closeInstall(); };
 
+// ── indicador de grabación en el logo ───────────────────────────────────────
+// El punto rojo del logo aparece solo si hay una grabación en curso (también
+// si arranca/termina mientras la biblioteca está abierta).
+function setLogoRecording(on) {
+  document.querySelector('.logo')?.classList.toggle('recording', !!on);
+}
+async function refreshRecordingIndicator() {
+  try {
+    const st = await chrome.runtime.sendMessage({ target: TARGET.BG, type: MSG.GET_STATE });
+    setLogoRecording(st?.status === 'recording');
+  } catch { setLogoRecording(false); }
+}
+chrome.runtime.onMessage.addListener((msg) => {
+  if (!msg) return;
+  if (msg.type === MSG.STARTED) setLogoRecording(true);
+  else if (msg.type === MSG.STOPPED || msg.type === MSG.ERROR) setLogoRecording(false);
+});
+
 // Markdown → HTML mínimo y SEGURO (escapamos antes; sin innerHTML de usuario).
 function escapeHtml(s) {
   return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -250,6 +300,7 @@ function renderMarkdown(md) {
 
 let lastResult = null;
 let lastRecName = '';
+let lastRec = null;   // grabación actual del modal (para Regenerar)
 
 function openTx(name) {
   lastResult = null;
@@ -317,19 +368,36 @@ el.txDownload.onclick = () => {
   const md = buildMarkdownFile(lastResult, lastRecName);
   downloadBlob(new Blob([md], { type: 'text/markdown' }), `${lastRecName.replace(/\.[^.]+$/, '')}.md`);
 };
+el.txRegen.onclick = () => { if (lastRec) transcribeFlow(lastRec); };
 el.txClose.onclick = closeTx;
 el.tx.onclick = (e) => { if (e.target === el.tx) closeTx(); };
+
+// Abre el modal mostrando una transcripción YA generada (guardada en la
+// grabación). No toca el backend: se puede leer offline cuando quieras.
+function showSavedTranscription(rec) {
+  lastRec = rec;
+  lastRecName = rec.name || 'reunion';
+  el.txTitle.textContent = `Transcripción — ${lastRecName}`;
+  el.txProgress.hidden = true;
+  el.txError.hidden = true;
+  el.tx.hidden = false;
+  renderTxResult(rec.transcription);
+}
 
 async function transcribeFlow(rec) {
   // Chequeo rápido: ¿está el backend? Si no, mostramos el onboarding de
   // instalación en vez de un error seco.
   const info = await refreshBackendStatus();
   if (!info) { openInstall(); return; }
+  lastRec = rec;
   openTx(rec.name);
   try {
     const blob = await buildBlob(rec);
     const result = await transcribeRecording(blob, rec.name, updateTxProgress);
     renderTxResult(result);
+    // Persistimos el resultado para poder re-leerlo sin regenerar.
+    await db.updateRecording(rec.id, { transcription: result });
+    render();
     toast('Transcripción lista ✓');
   } catch (err) {
     showTxError(err?.message || String(err));
@@ -498,6 +566,7 @@ async function render() {
     badges.innerHTML =
       `<span class="badge mode">${rec.mode === 'audio' ? 'AUDIO' : 'VIDEO'}</span>` +
       (rec.savedToFolder ? '<span class="badge folder">EN CARPETA</span>' : '') +
+      (rec.transcription ? '<span class="badge tx">TRANSCRITA</span>' : '') +
       (incompleteRec ? '<span class="badge warn">INCOMPLETA</span>' : '');
 
     // selección por fila (modo selección)
@@ -521,15 +590,27 @@ async function render() {
     };
 
     node.querySelector('.act-rename').onclick = () => renameRecording(rec, node.querySelector('.name'));
-    node.querySelector('.act-transcribe').onclick = () => transcribeFlow(rec).catch((e) => showTxError(e?.message || String(e)));
+
+    // Si ya tiene transcripción, el botón pasa a "Ver resumen" (lectura offline).
+    const txBtn = node.querySelector('.act-transcribe');
+    if (rec.transcription) {
+      txBtn.textContent = '📄 Ver resumen';
+      txBtn.onclick = () => showSavedTranscription(rec);
+    } else {
+      txBtn.textContent = '📝 Transcribir + Resumir';
+      txBtn.onclick = () => transcribeFlow(rec).catch((e) => showTxError(e?.message || String(e)));
+    }
+
     node.querySelector('.act-play').onclick = () => play(rec).catch(() => toast('No se pudo reproducir'));
     node.querySelector('.act-save').onclick = () => saveAs(rec);
-    node.querySelector('.act-dl').onclick = async () => {
-      const blob = await buildBlob(rec);
-      downloadBlob(blob, rec.name || timestampName('webm'));
-    };
+    node.querySelector('.act-open').onclick = () => openInTab(rec).catch(() => toast('No se pudo abrir'));
     node.querySelector('.act-del').onclick = async () => {
-      if (!confirm(`¿Eliminar "${rec.name}"? Esta acción no se puede deshacer.`)) return;
+      const onDisk = rec.savedToFolder;
+      const msg = onDisk
+        ? `¿Eliminar "${rec.name}"?\nSe borra de la biblioteca Y el archivo de la carpeta. No se puede deshacer.`
+        : `¿Eliminar "${rec.name}"? No se puede deshacer.`;
+      if (!confirm(msg)) return;
+      if (onDisk) await deleteFromDisk(rec);
       await db.deleteRecording(rec.id);
       toast('Grabación eliminada');
       render();
@@ -559,6 +640,7 @@ async function render() {
   await renderFolder();
   await render();
   await refreshBackendStatus();
+  await refreshRecordingIndicator();
   // Chip: si está activo, re-verifica; si está apagado, abre el onboarding.
   el.backendChip.onclick = () => { if (backendOnline) refreshBackendStatus(); else openInstall(); };
   // Sondeo periódico: apenas instalan el backend y arranca, el chip pasa a
