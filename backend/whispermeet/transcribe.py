@@ -20,11 +20,14 @@ def _get_model():
     if _model is None:
         from faster_whisper import WhisperModel
 
+        # Cargamos desde la carpeta PLANA donde models.py dejó el modelo
+        # (model.bin real). Pasar el tamaño "small" + download_root usa el
+        # layout de caché de HF con symlinks, que CTranslate2 no abre bien en
+        # Windows ("Unable to open file 'model.bin'").
         _model = WhisperModel(
-            config.WHISPER_MODEL_SIZE,
+            str(config.WHISPER_DIR),
             device=config.WHISPER_DEVICE,
             compute_type=config.WHISPER_COMPUTE_TYPE,
-            download_root=str(config.WHISPER_DIR),
         )
     return _model
 

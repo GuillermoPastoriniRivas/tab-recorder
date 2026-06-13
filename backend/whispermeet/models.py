@@ -20,8 +20,9 @@ _WHISPER_SPAN = 0.12  # peso del tramo de Whisper en el progreso global
 
 
 def whisper_ready() -> bool:
-    # faster-whisper guarda el modelo en subcarpetas con un model.bin dentro.
-    return any(config.WHISPER_DIR.rglob("model.bin"))
+    # Layout PLANO: model.bin real directo en WHISPER_DIR (lo que carga el
+    # transcriptor). No miramos el caché de HF con symlinks.
+    return (config.WHISPER_DIR / "model.bin").exists() and (config.WHISPER_DIR / "config.json").exists()
 
 
 def llm_ready() -> bool:
