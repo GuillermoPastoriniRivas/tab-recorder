@@ -9,3 +9,4 @@ build.log
 test_run*.log
 backend/installer/Output/
 *.mp4
+*.zip

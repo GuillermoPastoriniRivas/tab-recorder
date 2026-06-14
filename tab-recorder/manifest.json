@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Tab Recorder",
-  "version": "1.0.0",
-  "description": "Graba el audio y video de cualquier pestaña mezclando tu micrófono. Ideal para reuniones y videollamadas. 100% local.",
+  "version": "1.1.0",
+  "description": "Graba audio y video de cualquier pestaña con tu micrófono, y obtené transcripción y resumen con IA. Ideal para reuniones. 100% local.",
   "permissions": ["tabCapture", "offscreen", "activeTab", "storage"],
   "host_permissions": ["http://127.0.0.1:8765/*"],
   "background": {
