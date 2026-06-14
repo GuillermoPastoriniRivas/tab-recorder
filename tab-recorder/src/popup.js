@@ -10,7 +10,7 @@ const el = {
   modeSeg: $('modeSeg'), mic: $('mic'), meterCanvas: $('meterCanvas'), enableMic: $('enableMic'),
   echo: $('echo'),
   advToggle: $('advToggle'), advPanel: $('advPanel'),
-  formatSeg: $('formatSeg'), qualitySeg: $('qualitySeg'), audioCopy: $('audioCopy'),
+  formatSeg: $('formatSeg'), qualitySeg: $('qualitySeg'),
   formatNote: $('formatNote'), qualityNote: $('qualityNote'),
   start: $('start'), pause: $('pause'), resume: $('resume'), stop: $('stop'),
   muteMic: $('muteMic'), muteLabel: $('muteLabel'),
@@ -35,7 +35,6 @@ async function loadSettings() {
   el.echo.checked = s.echoCancellation !== false;
   setFormat(s.format || DEFAULT_SETTINGS.format);
   setQuality(s.quality || DEFAULT_SETTINGS.quality);
-  el.audioCopy.checked = !!s.audioCopy;
   updateFormatNote();
   await refreshFolderStatus();
   return s;
@@ -70,7 +69,6 @@ async function persistSettings() {
     echoCancellation: el.echo.checked,
     format,
     quality,
-    audioCopy: el.audioCopy.checked,
   });
 }
 
@@ -112,7 +110,6 @@ el.formatSeg.querySelectorAll('.seg').forEach((b) => {
 el.qualitySeg.querySelectorAll('.seg').forEach((b) => {
   b.onclick = () => { setQuality(b.dataset.quality); persistSettings(); };
 });
-el.audioCopy.onchange = persistSettings;
 
 el.advToggle.onclick = () => {
   const willOpen = el.advPanel.hidden;
@@ -305,7 +302,7 @@ el.start.onclick = async () => {
       resp = await withTimeout(chrome.runtime.sendMessage({
         target: TARGET.BG, type: MSG.START,
         streamId, mode, micDeviceId: el.mic.value, echoCancellation: el.echo.checked, useFolder,
-        format, quality, audioCopy: el.audioCopy.checked,
+        format, quality,
       }), 15000, 'iniciar la grabación');
     } catch (err) {
       await cancelInBg();
